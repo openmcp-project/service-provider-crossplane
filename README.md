@@ -25,4 +25,4 @@ We as members, contributors, and leaders pledge to make participation in our com
 
 Copyright 2025 SAP SE or an SAP affiliate company and service-provider-crossplane contributors. Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/openmcp-project/service-provider-crossplane).
 
-"Crossplane" is a registered trademark from Linux Foundation (https://www.linuxfoundation.org/legal/trademarks) The proposed name uses it in a fair manner, as it just names what our project does. So the repo name should be Ok. Somewhere in the project documentation, we should put a trademark notice: "Crossplane (circle-r symbol) is a registered trademark of the Linux Foundation." This notice can be anywhere that is convenient for you - Readme, About, Notice, documentation - just have it somewhere so that we can point to it should there ever be a dispute.
+"Crossplane" is a registered trademark of the Linux Foundation.
