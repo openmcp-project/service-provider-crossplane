@@ -46,80 +46,11 @@ spec:
                     CrossplaneProviderConfig represents configuration for Crossplane providers in a ControlPlane.
                     Primarily based on the Crossplane open source API.
                   properties:
-                    controllerConfigRef:
-                      description: |-
-                        ControllerConfigRef references a ControllerConfig resource that will be
-                        used to configure the packaged controller Deployment.
-                        Deprecated: Use RuntimeConfigReference instead.
-                      properties:
-                        name:
-                          description: Name of the ControllerConfig.
-                          type: string
-                      required:
-                      - name
-                      type: object
                     name:
                       description: |-
                         Name of the provider.
                         Using a well-known name will automatically configure the "package" field.
                       type: string
-                    package:
-                      description: |-
-                        Provider package to be installed.
-                        If "name" is set to a well-known value, this field will be configured automatically.
-                      type: string
-                    packagePullPolicy:
-                      default: IfNotPresent
-                      description: |-
-                        Pull policy for the provider.
-                        One of Always, Never, IfNotPresent.
-                      enum:
-                      - Always
-                      - Never
-                      - IfNotPresent
-                      type: string
-                    packagePullSecrets:
-                      description: PackagePullSecrets are named secrets in the same
-                        namespace that can be used to fetch packages from private
-                        registries.
-                      items:
-                        description: |-
-                          LocalObjectReference contains enough information to let you locate the
-                          referenced object inside the same namespace.
-                        properties:
-                          name:
-                            default: ""
-                            description: |-
-                              Name of the referent.
-                              This field is effectively required, but due to backwards compatibility is
-                              allowed to be empty. Instances of this type with an empty value here are
-                              almost certainly wrong.
-                              More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                            type: string
-                        type: object
-                        x-kubernetes-map-type: atomic
-                      type: array
-                    runtimeConfigRef:
-                      default:
-                        name: default
-                      description: |-
-                        RuntimeConfigRef references a RuntimeConfig resource that will be used
-                        to configure the package runtime.
-                      properties:
-                        apiVersion:
-                          default: pkg.crossplane.io/v1beta1
-                          description: API version of the referent.
-                          type: string
-                        kind:
-                          default: DeploymentRuntimeConfig
-                          description: Kind of the referent.
-                          type: string
-                        name:
-                          description: Name of the RuntimeConfig.
-                          type: string
-                      required:
-                      - name
-                      type: object
                     version:
                       description: Version of the provider to install.
                       type: string

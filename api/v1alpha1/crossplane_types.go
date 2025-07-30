@@ -17,8 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	crossplanev1 "github.com/crossplane/crossplane/apis/pkg/v1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -31,22 +29,6 @@ type CrossplaneProviderConfig struct {
 
 	// Version of the provider to install.
 	Version string `json:"version"`
-
-	// Provider package to be installed.
-	// If "name" is set to a well-known value, this field will be configured automatically.
-	// +kubebuilder:validation:Optional
-	Package string `json:"package,omitempty"`
-
-	// Pull policy for the provider.
-	// One of Always, Never, IfNotPresent.
-	// +kubebuilder:default=IfNotPresent
-	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
-	PackagePullPolicy *corev1.PullPolicy `json:"packagePullPolicy,omitempty"`
-
-	// PackagePullSecrets are named secrets in the same namespace that can be used to fetch packages from private registries.
-	PackagePullSecrets []corev1.LocalObjectReference `json:"packagePullSecrets,omitempty"`
-
-	crossplanev1.PackageRuntimeSpec `json:",inline"`
 }
 
 // CrossplaneSpec defines the desired state of Crossplane
