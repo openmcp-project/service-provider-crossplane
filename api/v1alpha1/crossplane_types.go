@@ -17,28 +17,52 @@ limitations under the License.
 package v1alpha1
 
 import (
+	crossplanev1 "github.com/crossplane/crossplane/apis/pkg/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// CrossplaneProviderConfig represents configuration for Crossplane providers in a ControlPlane.
+// Primarily based on the Crossplane open source API.
+type CrossplaneProviderConfig struct {
+	// Name of the provider.
+	// Using a well-known name will automatically configure the "package" field.
+	Name string `json:"name"`
+
+	// Version of the provider to install.
+	Version string `json:"version"`
+
+	// Provider package to be installed.
+	// If "name" is set to a well-known value, this field will be configured automatically.
+	// +kubebuilder:validation:Optional
+	Package string `json:"package,omitempty"`
+
+	// Pull policy for the provider.
+	// One of Always, Never, IfNotPresent.
+	// +kubebuilder:default=IfNotPresent
+	// +kubebuilder:validation:Enum=Always;Never;IfNotPresent
+	PackagePullPolicy *corev1.PullPolicy `json:"packagePullPolicy,omitempty"`
+
+	// PackagePullSecrets are named secrets in the same namespace that can be used to fetch packages from private registries.
+	PackagePullSecrets []corev1.LocalObjectReference `json:"packagePullSecrets,omitempty"`
+
+	crossplanev1.PackageRuntimeSpec `json:",inline"`
+}
 
 // CrossplaneSpec defines the desired state of Crossplane
 type CrossplaneSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+	// The Version of Crossplane to install.
+	Version string `json:"version"`
 
-	// foo is an example field of Crossplane. Edit crossplane_types.go to remove/update
-	// +optional
-	Foo *string `json:"foo,omitempty"`
+	// List of Crossplane providers to be installed.
+	// +kubebuilder:validation:Optional
+	Providers []*CrossplaneProviderConfig `json:"providers,omitempty"`
 }
 
 // CrossplaneStatus defines the observed state of Crossplane.
 type CrossplaneStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Current service state of the ProviderConfig.
+	Conditions []metav1.Condition `json:"conditions"`
 }
 
 // +kubebuilder:object:root=true
