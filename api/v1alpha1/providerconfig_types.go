@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// CrossplaneProviderConfig represents configuration for Crossplane providers in a ControlPlane.
+// AvailableCrossplaneProvider represents configuration for Crossplane providers in a ProviderConfig of the Service Provider Crossplane.
 type AvailableCrossplaneProvider struct {
 	// Name of the provider.
 	// +kubebuilder:validation:Required
@@ -50,7 +50,7 @@ type ChartSpec struct {
 	Version string `json:"version"`
 }
 
-// ProviderConfigSpec defines the desired state of ProviderConfig
+// ProviderConfigSpec defines the desired state of ProviderConfig.
 type ProviderConfigSpec struct {
 	// Optional custom Helm chart configuration.
 	// +kubebuilder:validation:Required

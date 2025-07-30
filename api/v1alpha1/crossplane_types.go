@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// CrossplaneProviderConfig represents configuration for Crossplane providers in a ControlPlane.
+// CrossplaneProviderConfig represents configuration for Crossplane providers in a Crossplane instance.
 type CrossplaneProviderConfig struct {
 	// Name of the provider.
 	Name string `json:"name"`
@@ -29,7 +29,7 @@ type CrossplaneProviderConfig struct {
 	Version string `json:"version"`
 }
 
-// CrossplaneSpec defines the desired state of Crossplane
+// CrossplaneSpec defines the desired state of a Crossplane instance.
 type CrossplaneSpec struct {
 	// The Version of Crossplane to install.
 	Version string `json:"version"`
@@ -39,7 +39,7 @@ type CrossplaneSpec struct {
 	Providers []*CrossplaneProviderConfig `json:"providers,omitempty"`
 }
 
-// CrossplaneStatus defines the observed state of Crossplane.
+// CrossplaneStatus defines the observed state of a Crossplane instance.
 type CrossplaneStatus struct {
 	// Current service state of the ProviderConfig.
 	Conditions []metav1.Condition `json:"conditions"`

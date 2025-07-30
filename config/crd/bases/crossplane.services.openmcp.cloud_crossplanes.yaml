@@ -43,7 +43,7 @@ spec:
                 description: List of Crossplane providers to be installed.
                 items:
                   description: CrossplaneProviderConfig represents configuration for
-                    Crossplane providers in a ControlPlane.
+                    Crossplane providers in a Crossplane instance.
                   properties:
                     name:
                       description: Name of the provider.
