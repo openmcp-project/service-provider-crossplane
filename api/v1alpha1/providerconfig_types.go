@@ -20,25 +20,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// ChartSpec identifies a Helm chart.
+type ChartSpec struct {
+	// Repository is the URL to a Helm repository
+	Repository string `json:"repository"`
+
+	// Name of the Helm chart
+	Name string `json:"name"`
+
+	// Version of the Helm chart, latest version if not set
+	Version string `json:"version"`
+}
 
 // ProviderConfigSpec defines the desired state of ProviderConfig
 type ProviderConfigSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
-
-	// foo is an example field of ProviderConfig. Edit providerconfig_types.go to remove/update
-	// +optional
-	Foo *string `json:"foo,omitempty"`
+	// Optional custom Helm chart configuration.
+	Chart ChartSpec `json:"chart"`
 }
 
 // ProviderConfigStatus defines the observed state of ProviderConfig.
 type ProviderConfigStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Current service state of the ProviderConfig.
+	Conditions []metav1.Condition `json:"conditions"`
 }
 
 // +kubebuilder:object:root=true
