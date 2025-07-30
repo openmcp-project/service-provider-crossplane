@@ -20,22 +20,54 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ChartSpec identifies a Helm chart.
-type ChartSpec struct {
-	// Repository is the URL to a Helm repository
-	Repository string `json:"repository"`
-
-	// Name of the Helm chart
+// CrossplaneProviderConfig represents configuration for Crossplane providers in a ControlPlane.
+// Primarily based on the Crossplane open source API.
+type AvailableCrossplaneProvider struct {
+	// Name of the provider.
+	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
-	// Version of the Helm chart, latest version if not set
+	// Version of the provider to install.
+	// +kubebuilder:validation:Required
+	Versions []string `json:"versions"`
+
+	// Package is the package name of the provider.
+	// +kubebuilder:validation:Required
+	Package string `json:"package"`
+}
+
+// ChartSpec identifies a Helm chart.
+type ChartSpec struct {
+	// Repository is the URL to a Helm repository.
+	// +kubebuilder:validation:Required
+	Repository string `json:"repository"`
+
+	// Name of the Helm chart.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// Version of the Helm chart.
+	// +kubebuilder:validation:Required
 	Version string `json:"version"`
 }
 
 // ProviderConfigSpec defines the desired state of ProviderConfig
 type ProviderConfigSpec struct {
 	// Optional custom Helm chart configuration.
+	// +kubebuilder:validation:Required
 	Chart ChartSpec `json:"chart"`
+
+	// ImageMapping holds the information about exchangable image locations in the Helm chart.
+	// +kubebuilder:validation:Optional
+	ImageMapping map[string]string `json:"imageMapping,omitempty"`
+
+	// AvailableVersions holds the list of available versions for Crossplane.
+	// +kubebuilder:validation:Required
+	AvailableVersions []string `json:"availableVersions"`
+
+	// AvailableProviders holds the list of providers that can be configured with the Service Provider Crossplane.
+	// +kubebuilder:validation:Required
+	AvailableProviders []AvailableCrossplaneProvider `json:"availableProviders"`
 }
 
 // ProviderConfigStatus defines the observed state of ProviderConfig.

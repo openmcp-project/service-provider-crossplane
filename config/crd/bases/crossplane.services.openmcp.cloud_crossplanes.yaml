@@ -47,9 +47,7 @@ spec:
                     Primarily based on the Crossplane open source API.
                   properties:
                     name:
-                      description: |-
-                        Name of the provider.
-                        Using a well-known name will automatically configure the "package" field.
+                      description: Name of the provider.
                       type: string
                     version:
                       description: Version of the provider to install.

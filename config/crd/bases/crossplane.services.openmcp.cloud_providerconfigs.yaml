@@ -39,25 +39,63 @@ spec:
           spec:
             description: spec defines the desired state of ProviderConfig
             properties:
+              availableProviders:
+                description: AvailableProviders holds the list of providers that can
+                  be configured with the Service Provider Crossplane.
+                items:
+                  description: |-
+                    CrossplaneProviderConfig represents configuration for Crossplane providers in a ControlPlane.
+                    Primarily based on the Crossplane open source API.
+                  properties:
+                    name:
+                      description: Name of the provider.
+                      type: string
+                    package:
+                      description: Package is the package name of the provider.
+                      type: string
+                    versions:
+                      description: Version of the provider to install.
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - name
+                  - package
+                  - versions
+                  type: object
+                type: array
+              availableVersions:
+                description: AvailableVersions holds the list of available versions
+                  for Crossplane.
+                items:
+                  type: string
+                type: array
               chart:
                 description: Optional custom Helm chart configuration.
                 properties:
                   name:
-                    description: Name of the Helm chart
+                    description: Name of the Helm chart.
                     type: string
                   repository:
-                    description: Repository is the URL to a Helm repository
+                    description: Repository is the URL to a Helm repository.
                     type: string
                   version:
-                    description: Version of the Helm chart, latest version if not
-                      set
+                    description: Version of the Helm chart.
                     type: string
                 required:
                 - name
                 - repository
                 - version
                 type: object
+              imageMapping:
+                additionalProperties:
+                  type: string
+                description: ImageMapping holds the information about exchangable
+                  image locations in the Helm chart.
+                type: object
             required:
+            - availableProviders
+            - availableVersions
             - chart
             type: object
           status:

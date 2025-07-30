@@ -24,7 +24,6 @@ import (
 // Primarily based on the Crossplane open source API.
 type CrossplaneProviderConfig struct {
 	// Name of the provider.
-	// Using a well-known name will automatically configure the "package" field.
 	Name string `json:"name"`
 
 	// Version of the provider to install.
