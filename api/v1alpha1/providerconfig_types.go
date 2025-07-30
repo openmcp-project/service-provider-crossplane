@@ -21,7 +21,6 @@ import (
 )
 
 // CrossplaneProviderConfig represents configuration for Crossplane providers in a ControlPlane.
-// Primarily based on the Crossplane open source API.
 type AvailableCrossplaneProvider struct {
 	// Name of the provider.
 	// +kubebuilder:validation:Required
