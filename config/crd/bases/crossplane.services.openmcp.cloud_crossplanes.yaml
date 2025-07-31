@@ -4,6 +4,8 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
+  labels:
+    openmcp.cloud/cluster: onboarding
   name: crossplanes.crossplane.services.openmcp.cloud
 spec:
   group: crossplane.services.openmcp.cloud
@@ -14,7 +16,17 @@ spec:
     singular: crossplane
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.version
+      name: Version
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Crossplane is the Schema for the crossplanes API

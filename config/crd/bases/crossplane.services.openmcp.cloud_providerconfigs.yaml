@@ -4,6 +4,8 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
+  labels:
+    openmcp.cloud/cluster: platform
   name: providerconfigs.crossplane.services.openmcp.cloud
 spec:
   group: crossplane.services.openmcp.cloud
@@ -12,9 +14,13 @@ spec:
     listKind: ProviderConfigList
     plural: providerconfigs
     singular: providerconfig
-  scope: Namespaced
+  scope: Cluster
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: ProviderConfig is the Schema for the providerconfigs API
