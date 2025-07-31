@@ -45,10 +45,13 @@ type CrossplaneStatus struct {
 	commonapi.Status `json:",inline"`
 }
 
+// Crossplane is the Schema for the crossplanes API
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
-// Crossplane is the Schema for the crossplanes API
+// +kubebuilder:printcolumn:JSONPath=`.spec.version`,name="Version",type=string
+// +kubebuilder:printcolumn:JSONPath=`.status.phase`,name="Phase",type=string
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:metadata:labels="openmcp.cloud/cluster=onboarding"
 type Crossplane struct {
 	metav1.TypeMeta `json:",inline"`
 
