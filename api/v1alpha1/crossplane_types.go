@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -41,8 +42,7 @@ type CrossplaneSpec struct {
 
 // CrossplaneStatus defines the observed state of a Crossplane instance.
 type CrossplaneStatus struct {
-	// Current service state of the ProviderConfig.
-	Conditions []metav1.Condition `json:"conditions"`
+	commonapi.Status `json:",inline"`
 }
 
 // +kubebuilder:object:root=true
