@@ -1,0 +1,9 @@
+apiVersion: crossplane.services.openmcp.cloud/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: providerconfig-sample
+spec:
+  chart:
+    repository: "https://charts.openmcp.cloud"
+    name: chart
+    version: v1.0.0
