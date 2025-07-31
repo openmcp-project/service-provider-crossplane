@@ -75,10 +75,12 @@ type ProviderConfigStatus struct {
 	commonapi.Status `json:",inline"`
 }
 
+// ProviderConfig is the Schema for the providerconfigs API
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-
-// ProviderConfig is the Schema for the providerconfigs API
+// +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:metadata:labels="openmcp.cloud/cluster=platform"
 type ProviderConfig struct {
 	metav1.TypeMeta `json:",inline"`
 

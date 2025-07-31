@@ -6,9 +6,73 @@
 
 Service provider Crossplane manages the lifecycle of Crossplane instances.
 
-## Requirements and Setup
+## Installation of the Service Provider Crossplane
 
-*Insert a short description what is required to get your project running...*
+### Local Development
+
+To install the service provider Crossplane locally, you can use the following command:
+
+```bash
+TODO
+```
+
+### OpenMCP Landscape
+
+```yaml
+apiVersion: services.openmcp.cloud/v1alpha1
+kind: ServiceProvider
+metadata:
+  name: crossplane
+spec:
+  image: ghcr.io/openmcp-project/images/service-provicer-crossplane:<version>
+```
+
+## Configure a `ProviderConfig`
+A `ProviderConfig` is an API where you can configure the installation of a Crossplane instance in your `ManagedControlPlane`.
+
+```yaml
+apiVersion: crossplane.services.openmcp.cloud/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: providerconfig-sample
+spec:
+  chart:
+    repository: "https://charts.crossplane.io/stable"
+    name: crossplane
+    version: v1.20.0
+```
+
+### Install a Crossplane instance
+
+```yaml
+apiVersion: crossplane.services.openmcp.cloud/v1alpha1
+kind: Crossplane
+metadata:
+  name: crossplane-sample
+  namespace: default
+spec:
+  version: v1.20.0
+  providers:
+    - name: provider-kubernetes
+      version: v0.18.0
+```
+
+## Development
+
+### Building the image locally
+
+To build the image locally, you can use the following command:
+
+```bash
+task build
+```
+
+### Generating the CRDs, DeepCopy functions etc.
+To generate the CRDs, DeepCopy functions, and other boilerplate code, you can use the following command:
+
+```bash
+task generate
+```
 
 ## Support, Feedback, Contributing
 
