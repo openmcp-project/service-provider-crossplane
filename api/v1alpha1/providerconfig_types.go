@@ -46,9 +46,9 @@ type ChartSpec struct {
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
 
-	// Version of the Helm chart.
+	// AvailableVersions of the Helm chart.
 	// +kubebuilder:validation:Required
-	Version string `json:"version"`
+	AvailableVersions []string `json:"availableVersions"`
 }
 
 // ProviderConfigSpec defines the desired state of ProviderConfig.
@@ -60,10 +60,6 @@ type ProviderConfigSpec struct {
 	// ImageMapping holds the information about exchangable image locations in the Helm chart.
 	// +kubebuilder:validation:Optional
 	ImageMapping map[string]string `json:"imageMapping,omitempty"`
-
-	// AvailableVersions holds the list of available versions for Crossplane.
-	// +kubebuilder:validation:Required
-	AvailableVersions []string `json:"availableVersions"`
 
 	// AvailableProviders holds the list of providers that can be configured with the Service Provider Crossplane.
 	// +kubebuilder:validation:Required
