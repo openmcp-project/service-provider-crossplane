@@ -39,7 +39,20 @@ spec:
   chart:
     repository: "https://charts.crossplane.io/stable"
     name: crossplane
-    version: v1.20.0
+    availableVersions:
+      - v1.20.0
+      - v1.19.0
+  availableProviders:
+    - name: provider-kuberentes
+      package: xpkg.upbound.io/provider-kubernetes
+      versions:
+        - v0.18.0
+        - v0.17.0
+    - name: provider-btp
+      package: ghcr.io/sap/crossplane-provider-btp
+      versions:
+        - v1.0.0
+        - v0.0.9
 ```
 
 ### Install a Crossplane instance
