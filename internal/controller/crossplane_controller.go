@@ -22,9 +22,15 @@ import (
 	"time"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
+	corev1 "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -38,6 +44,7 @@ import (
 	"github.com/openmcp-project/service-provider-crossplane/internal/scheme"
 	"github.com/openmcp-project/service-provider-crossplane/pkg/component"
 
+	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/kubeconfiggen"
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/targetrbac"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 )
@@ -49,6 +56,15 @@ var (
 	errFailedToRemoteClient         = errors.New("failed to build client for ControlPlane target")
 	errFailedToEnsureFluxKubeconfig = errors.New("failed to generate or save Flux kubeconfig")
 	errFailedToApplyFluxRBAC        = errors.New("failed to apply Flux RBAC")
+	errInvalidExpirationOrBuffer    = errors.New("desired expiration and buffer are incompatible. make sure that desired expiration is greater than the buffer")
+)
+
+const (
+	keyKubeconfig = "kubeconfig"
+	keyExpiration = "expiresAt"
+
+	kubeconfigExpiration = 10 * time.Minute
+	kubeconfigBuffer     = 3 * time.Minute
 )
 
 // CrossplaneReconciler reconciles a Crossplane object
@@ -56,6 +72,7 @@ type CrossplaneReconciler struct {
 	PlatformCluster         *clusters.Cluster
 	OnboardingCluster       *clusters.Cluster
 	ClusterAccessReconciler clusteraccess.Reconciler
+	Kubeconfiggen           kubeconfiggen.Generator
 }
 
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=crossplanes,verbs=get;list;watch;create;update;patch;delete
@@ -90,14 +107,26 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	tenantNamespace := utils.StableRequestNamespace(req.Namespace)
 	ctx = rcontext.WithTenantNamespace(ctx, tenantNamespace)
 
-	// Create a new ClusterRequest/AccessRequest based on Crossplane instance
+	// Create ClusterRequest/AccessRequest
+	res, err := r.ClusterAccessReconciler.Reconcile(ctx, req)
+	if err != nil {
+		log.Error(err, "failed to reconcile cluster access for landscaper instance")
+		return ctrl.Result{}, err
+	}
+
+	// AccessRequest was created but not yet granted
+	if res.RequeueAfter > 0 {
+		return ctrl.Result{RequeueAfter: res.RequeueAfter}, nil
+	}
+
+	// Get MCPCluster for Crossplane instance
 	mcpCluster, err := r.ClusterAccessReconciler.MCPCluster(ctx, req)
 	if err != nil {
 		log.Error(err, "failed to get MCP cluster for Crossplane instance")
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 	}
 
-	// Flux KubeConfig and RBAC
+	// Flux KubeConfig and RBAC TODO: Is this really needed?
 	if err := targetrbac.Apply(ctx, mcpCluster.Client(), v1beta1.ServiceAccountReference{
 		Name:      "openmcp-flux-deployer",
 		Namespace: "openmcp-system",
@@ -105,8 +134,18 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, errors.Join(errFailedToApplyFluxRBAC, err)
 	}
 
+	// Ensure FluxKubeconfig is created or updated
+	fluxKubeconfig, err := r.ensureFluxKubeconfig(ctx, mcpCluster.RESTConfig(), tenantNamespace, v1beta1.ServiceAccountReference{
+		Name:      "openmcp-flux-deployer",
+		Namespace: "openmcp-system",
+	})
+	if err != nil {
+		return ctrl.Result{}, errors.Join(errFailedToEnsureFluxKubeconfig, err)
+	}
+	ctx = rcontext.WithFluxKubeconfigRef(ctx, fluxKubeconfig)
+
 	// Handle CreateOrUpdate
-	//    1. Ensure finalizer is set
+	//    1. Ensure finalizer is set on Crossplane instance AND ManagedControlPlane resource at Onboarding
 	//    2. New Juggler
 
 	return ctrl.Result{}, nil
@@ -177,6 +216,62 @@ func getMCPPermissions() []clustersv1alpha1.PermissionsRequest {
 	}
 }
 
+func (r *CrossplaneReconciler) ensureFluxKubeconfig(ctx context.Context, mcpRestConfig *rest.Config, namespace string, saRef v1beta1.ServiceAccountReference) (*corev1.SecretReference, error) {
+	if kubeconfigBuffer >= kubeconfigExpiration {
+		return nil, errInvalidExpirationOrBuffer
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "flux-kubeconfig",
+			Namespace: namespace,
+		},
+	}
+	if err := r.PlatformCluster.Client().Get(ctx, client.ObjectKeyFromObject(secret), secret); client.IgnoreNotFound(err) != nil {
+		return nil, err
+	}
+
+	if secret.Data == nil {
+		secret.Data = map[string][]byte{}
+	}
+
+	if expirationStr, ok := secret.Data[keyExpiration]; ok {
+		expiration, err := time.Parse(time.RFC3339, string(expirationStr))
+		if err != nil {
+			return nil, err
+		}
+
+		if time.Now().Before(expiration.Add(-kubeconfigBuffer)) {
+			// kubeconfig is still valid
+			return &corev1.SecretReference{Name: secret.Name, Namespace: secret.Namespace}, nil
+		}
+	}
+
+	kubeconfig, expiration, err := r.Kubeconfiggen.ForServiceAccount(ctx, mcpRestConfig, saRef, kubeconfigExpiration)
+	if err != nil {
+		return nil, err
+	}
+
+	kubeconfigBytes, err := clientcmd.Write(*kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = controllerutil.CreateOrUpdate(ctx, r.PlatformCluster.Client(), secret, func() error {
+		SetLabel(secret, "app.kubernetes.io/managed-by", "service-provider-crossplane")
+
+		if secret.Data == nil {
+			secret.Data = map[string][]byte{}
+		}
+
+		secret.Data[keyKubeconfig] = kubeconfigBytes
+		secret.Data[keyExpiration] = []byte(expiration.Format(time.RFC3339))
+		return nil
+	})
+
+	return &corev1.SecretReference{Name: secret.Name, Namespace: secret.Namespace}, err
+}
+
 // GetResolverFunc returns a VersionResolver.
 // The VersionResolver is used to verify if the Crossplane instance configuration with its providers is valid.
 // It checks the name and versions agains the configured v1alpha1.ProviderConfig on the Platform cluster.
@@ -214,4 +309,13 @@ func (r *CrossplaneReconciler) GetResolverFunc(config *v1alpha1.Crossplane, prov
 		}
 		return v1beta1.ComponentVersion{}, errors.New("requested version not available")
 	}
+}
+
+func SetLabel(obj metav1.Object, label string, value string) {
+	labels := obj.GetLabels()
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	labels[label] = value
+	obj.SetLabels(labels)
 }
