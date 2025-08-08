@@ -21,17 +21,21 @@ import (
 	"errors"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
 	corev1 "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
+	condApi "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -44,16 +48,16 @@ import (
 	"github.com/openmcp-project/service-provider-crossplane/internal/scheme"
 	"github.com/openmcp-project/service-provider-crossplane/pkg/component"
 
+	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/components"
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/kubeconfiggen"
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/targetrbac"
+	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
+	"github.com/openmcp-project/control-plane-operator/pkg/juggler/fluxcd"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 )
 
 var (
 	errComponentRemaining           = errors.New("at least one component is still installed")
-	errFailedToCreateCPNamespace    = errors.New("failed to create namespace for ControlPlane")
-	errFailedToBuildRESTConfig      = errors.New("failed to build REST config from ControlPlane target")
-	errFailedToRemoteClient         = errors.New("failed to build client for ControlPlane target")
 	errFailedToEnsureFluxKubeconfig = errors.New("failed to generate or save Flux kubeconfig")
 	errFailedToApplyFluxRBAC        = errors.New("failed to apply Flux RBAC")
 	errInvalidExpirationOrBuffer    = errors.New("desired expiration and buffer are incompatible. make sure that desired expiration is greater than the buffer")
@@ -73,14 +77,16 @@ type CrossplaneReconciler struct {
 	OnboardingCluster       *clusters.Cluster
 	ClusterAccessReconciler clusteraccess.Reconciler
 	Kubeconfiggen           kubeconfiggen.Generator
+	Recorder                record.EventRecorder
 }
 
+// Reconcile reconciles the Crossplane instance.
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=crossplanes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=crossplanes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=crossplanes/finalizers,verbs=update
-// Reconcile reconciles the Crossplane instance.
 func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
+	newConditions := []metav1.Condition{}
 
 	// Fetch the Crossplane instance from the onboarding cluster
 	crossplane := &v1alpha1.Crossplane{}
@@ -100,7 +106,7 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Handle ProviderConfig as ReleaseChannel
-	resolverFn := r.GetResolverFunc(crossplane, providerConfig)
+	resolverFn := r.GetResolverFunc(providerConfig)
 	ctx = rcontext.WithVersionResolver(ctx, resolverFn)
 
 	// ensure namespace on platform cluster
@@ -148,7 +154,74 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	//    1. Ensure finalizer is set on Crossplane instance AND ManagedControlPlane resource at Onboarding
 	//    2. New Juggler
 
+	conditions, err := r.createOrUpdateCrossplaneInstance(ctx, crossplane, mcpCluster.Client())
+	if err != nil {
+		log.Error(err, "failed to create or update Crossplane instance")
+		return ctrl.Result{}, err
+	}
+
+	for _, c := range conditions {
+		condApi.SetStatusCondition(&newConditions, c)
+	}
+
+	condApi.SetStatusCondition(&newConditions, v1beta1.Available())
+
 	return ctrl.Result{}, nil
+}
+
+func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Context, crossplane *v1alpha1.Crossplane, mcpClient client.Client) ([]metav1.Condition, error) {
+	j, err := r.newJuggler(ctx, crossplane, mcpClient)
+	if err != nil {
+		return nil, err
+	}
+	result := j.Reconcile(ctx)
+
+	enabledComponents := 0
+	healthyComponents := 0
+	conditions := []metav1.Condition{}
+	for _, componentResult := range result {
+		if componentResult.Component.IsEnabled() {
+			enabledComponents++
+		}
+		if componentResult.Result == juggler.StatusHealthy {
+			healthyComponents++
+		}
+
+		if !componentResult.Component.IsEnabled() && componentResult.Result == juggler.StatusDisabled {
+			// Component is not enabled and has been successfully uninstalled (or has never been installed).
+			// Don't output a condition in this case.
+			continue
+		}
+		conditions = append(conditions, componentResult.ToCondition())
+	}
+
+	return conditions, nil
+}
+
+func (r *CrossplaneReconciler) newJuggler(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client) (*juggler.Juggler, error) {
+	logger := log.FromContext(ctx)
+	jug := juggler.NewJuggler(logger, juggler.NewEventRecorder(r.Recorder, xp))
+
+	xpComp := &component.Crossplane{
+		Config: &xp.Spec,
+	}
+	jug.RegisterComponent(xpComp)
+
+	r.registerReconcilers(jug, logger, mcpClient)
+
+	if err := jug.RegisterOrphanedComponents(ctx); err != nil {
+		return nil, err
+	}
+
+	return jug, nil
+}
+
+func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, logger logr.Logger, mcpClient client.Client) {
+	fr := fluxcd.NewFluxReconciler(logger, r.PlatformCluster.Client(), mcpClient)
+	fr.RegisterType(
+		&components.Crossplane{},
+	)
+	juggler.RegisterReconciler(fr)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -272,11 +345,10 @@ func (r *CrossplaneReconciler) ensureFluxKubeconfig(ctx context.Context, mcpRest
 	return &corev1.SecretReference{Name: secret.Name, Namespace: secret.Namespace}, err
 }
 
-// GetResolverFunc returns a VersionResolver.
-// The VersionResolver is used to verify if the Crossplane instance configuration with its providers is valid.
-// It checks the name and versions agains the configured v1alpha1.ProviderConfig on the Platform cluster.
+// GetResolverFunc is used to verify if the Crossplane instance configuration with its providers is valid.
+// It checks the name and versions against the configured v1alpha1.ProviderConfig on the Platform cluster.
 // The function returns a v1beta1.VersionResolverFn that can be used to resolve the versions later in the reconcile loop.
-func (r *CrossplaneReconciler) GetResolverFunc(config *v1alpha1.Crossplane, providerConfig *v1alpha1.ProviderConfig) v1beta1.VersionResolverFn {
+func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.ProviderConfig) v1beta1.VersionResolverFn {
 	return func(componentName string, version string) (v1beta1.ComponentVersion, error) {
 		// Check if Crossplane is installable
 		if componentName == component.ComponentNameCrossplane {

@@ -304,6 +304,7 @@ func main() {
 		PlatformCluster:   platformCluster,
 		OnboardingCluster: onboardingCluster,
 		Kubeconfiggen:     &kubeconfiggen.Default{},
+		Recorder:          mgr.GetEventRecorderFor("sp-crossplane-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error(err, "unable to create controller", "controller", "Crossplane")
 		os.Exit(1)
