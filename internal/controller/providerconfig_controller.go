@@ -19,18 +19,18 @@ package controller
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	"github.com/openmcp-project/controller-utils/pkg/clusters"
 
 	crossplaneservicesopenmcpcloudv1alpha1 "github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 )
 
 // ProviderConfigReconciler reconciles a ProviderConfig object
 type ProviderConfigReconciler struct {
-	PlatformCluster   *clusters.Cluster
-	OnboardingCluster *clusters.Cluster
+	client.Client
+	Scheme *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=providerconfigs,verbs=get;list;watch;create;update;patch;delete
