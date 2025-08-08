@@ -36,6 +36,7 @@ import (
 
 	v1alpha1 "github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 	"github.com/openmcp-project/service-provider-crossplane/internal/scheme"
+	"github.com/openmcp-project/service-provider-crossplane/pkg/component"
 
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/targetrbac"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
@@ -77,14 +78,17 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	providerConfig := &v1alpha1.ProviderConfig{}
 	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: "default"}, providerConfig); err != nil {
 		log.Error(err, "unable to fetch ProviderConfig", "name", "default")
+		// TODO: status update on Crossplane resource with "internal error occurred"?
 		return ctrl.Result{}, err
 	}
 
 	// Handle ProviderConfig as ReleaseChannel
+	resolverFn := r.GetResolverFunc(crossplane, providerConfig)
+	ctx = rcontext.WithVersionResolver(ctx, resolverFn)
 
 	// ensure namespace on platform cluster
 	tenantNamespace := utils.StableRequestNamespace(req.Namespace)
-	rcontext.WithTenantNamespace(ctx, tenantNamespace)
+	ctx = rcontext.WithTenantNamespace(ctx, tenantNamespace)
 
 	// Create a new ClusterRequest/AccessRequest based on Crossplane instance
 	mcpCluster, err := r.ClusterAccessReconciler.MCPCluster(ctx, req)
@@ -170,5 +174,44 @@ func getMCPPermissions() []clustersv1alpha1.PermissionsRequest {
 				},
 			},
 		},
+	}
+}
+
+// GetResolverFunc returns a VersionResolver.
+// The VersionResolver is used to verify if the Crossplane instance configuration with its providers is valid.
+// It checks the name and versions agains the configured v1alpha1.ProviderConfig on the Platform cluster.
+// The function returns a v1beta1.VersionResolverFn that can be used to resolve the versions later in the reconcile loop.
+func (r *CrossplaneReconciler) GetResolverFunc(config *v1alpha1.Crossplane, providerConfig *v1alpha1.ProviderConfig) v1beta1.VersionResolverFn {
+	return func(componentName string, version string) (v1beta1.ComponentVersion, error) {
+		// Check if Crossplane is installable
+		if componentName == component.ComponentNameCrossplane {
+			// Check if available version matches the requested version
+			for _, availableVersion := range providerConfig.Spec.Chart.AvailableVersions {
+				if availableVersion == version {
+					return v1beta1.ComponentVersion{
+						HelmRepo:  providerConfig.Spec.Chart.Repository,
+						HelmChart: providerConfig.Spec.Chart.Name,
+						Version:   version,
+					}, nil
+				}
+			}
+			return v1beta1.ComponentVersion{}, errors.New("requested version not available")
+		}
+
+		// Check if Provider is installable
+		for _, provider := range providerConfig.Spec.AvailableProviders {
+			if componentName == provider.Name {
+				// Provider exists, now lets check if version is available
+				for _, availableVersion := range provider.Versions {
+					if availableVersion == version {
+						return v1beta1.ComponentVersion{
+							DockerRef: provider.Package,
+							Version:   version,
+						}, nil
+					}
+				}
+			}
+		}
+		return v1beta1.ComponentVersion{}, errors.New("requested version not available")
 	}
 }
