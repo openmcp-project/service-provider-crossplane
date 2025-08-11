@@ -116,7 +116,7 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// Create ClusterRequest/AccessRequest
 	res, err := r.ClusterAccessReconciler.Reconcile(ctx, req)
 	if err != nil {
-		log.Error(err, "failed to reconcile cluster access for landscaper instance")
+		log.Error(err, "failed to reconcile cluster access for crossplane instance")
 		return ctrl.Result{}, err
 	}
 
