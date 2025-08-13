@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	crossplaneRelease       = "crossplane"
+	CrossplaneRelease       = "crossplane"
 	CrossplaneNamespace     = "crossplane-system"
 	ComponentNameCrossplane = "Crossplane"
 )
@@ -105,7 +105,7 @@ func (c *Crossplane) GetNamespace() string {
 
 func (c *Crossplane) IsInstallable(ctx context.Context) (bool, error) {
 	rfn := rcontext.VersionResolver(ctx)
-	if _, err := rfn(crossplaneRelease, c.Config.Version); err != nil {
+	if _, err := rfn(CrossplaneRelease, c.Config.Version); err != nil {
 		return false, err
 	}
 	return true, nil
@@ -153,7 +153,7 @@ func (c *Crossplane) BuildManifesto(ctx context.Context) (fluxcd.Manifesto, erro
 					},
 				},
 			},
-			ReleaseName:      crossplaneRelease,
+			ReleaseName:      CrossplaneRelease,
 			TargetNamespace:  CrossplaneNamespace,
 			StorageNamespace: CrossplaneNamespace,
 			KubeConfig:       rcontext.FluxKubeconfigRef(ctx),
@@ -187,7 +187,7 @@ func (c *Crossplane) applyDefaultChartSpec(rfn v1beta1.VersionResolverFn) {
 		c.Config = &v1alpha1.CrossplaneSpec{}
 	}
 
-	comp, _ := rfn(crossplaneRelease, c.Config.Version)
+	comp, _ := rfn(CrossplaneRelease, c.Config.Version)
 
 	if c.ChartSpec == nil {
 		c.ChartSpec = &v1beta1.ChartSpec{

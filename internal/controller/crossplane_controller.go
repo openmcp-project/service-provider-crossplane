@@ -34,10 +34,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
@@ -48,7 +46,6 @@ import (
 	"github.com/openmcp-project/service-provider-crossplane/internal/scheme"
 	"github.com/openmcp-project/service-provider-crossplane/pkg/component"
 
-	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/components"
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/kubeconfiggen"
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/targetrbac"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
@@ -90,7 +87,7 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Fetch the Crossplane instance from the onboarding cluster
 	crossplane := &v1alpha1.Crossplane{}
-	if err := r.OnboardingCluster.Cluster().GetClient().Get(ctx, req.NamespacedName, crossplane); err != nil {
+	if err := r.OnboardingCluster.Client().Get(ctx, req.NamespacedName, crossplane); err != nil {
 		log.Error(err, "unable to fetch Crossplane")
 		return ctrl.Result{}, err
 	}
@@ -219,7 +216,7 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, xp *v1alpha1.Cros
 func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, logger logr.Logger, mcpClient client.Client) {
 	fr := fluxcd.NewFluxReconciler(logger, r.PlatformCluster.Client(), mcpClient)
 	fr.RegisterType(
-		&components.Crossplane{},
+		&component.Crossplane{},
 	)
 	juggler.RegisterReconciler(fr)
 }
@@ -233,8 +230,7 @@ func (r *CrossplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithMCPPermissions(getMCPPermissions())
 
 	return ctrl.NewControllerManagedBy(mgr).
-		WatchesRawSource(source.Kind(r.OnboardingCluster.Cluster().GetCache(), &v1alpha1.Crossplane{}, &handler.TypedEnqueueRequestForObject[*v1alpha1.Crossplane]{})).
-		Named("crossplane").
+		For(&v1alpha1.Crossplane{}).
 		Complete(r)
 }
 
@@ -351,7 +347,7 @@ func (r *CrossplaneReconciler) ensureFluxKubeconfig(ctx context.Context, mcpRest
 func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.ProviderConfig) v1beta1.VersionResolverFn {
 	return func(componentName string, version string) (v1beta1.ComponentVersion, error) {
 		// Check if Crossplane is installable
-		if componentName == component.ComponentNameCrossplane {
+		if componentName == component.CrossplaneRelease {
 			// Check if available version matches the requested version
 			for _, availableVersion := range providerConfig.Spec.Chart.AvailableVersions {
 				if availableVersion == version {

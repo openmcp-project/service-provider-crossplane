@@ -300,6 +300,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	err = mgr.Add(platformCluster.Cluster())
+	if err != nil {
+		logger.Error(err, "unable to add platform cluster to manager")
+		os.Exit(1)
+	}
+
 	if err := (&controller.CrossplaneReconciler{
 		PlatformCluster:   platformCluster,
 		OnboardingCluster: onboardingCluster,

@@ -20,11 +20,12 @@ import (
 	"context"
 
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
-
-	crossplaneservicesopenmcpcloudv1alpha1 "github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
+	v1alpha1 "github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 )
 
 // ProviderConfigReconciler reconciles a ProviderConfig object
@@ -57,7 +58,7 @@ func (r *ProviderConfigReconciler) Reconcile(ctx context.Context, _ ctrl.Request
 // SetupWithManager sets up the controller with the Manager.
 func (r *ProviderConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&crossplaneservicesopenmcpcloudv1alpha1.ProviderConfig{}).
+		WatchesRawSource(source.Kind(r.PlatformCluster.Cluster().GetCache(), &v1alpha1.ProviderConfig{}, &handler.TypedEnqueueRequestForObject[*v1alpha1.ProviderConfig]{})).
 		Named("providerconfig").
 		Complete(r)
 }
