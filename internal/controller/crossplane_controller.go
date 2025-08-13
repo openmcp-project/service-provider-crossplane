@@ -35,7 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
@@ -54,7 +53,6 @@ import (
 )
 
 var (
-	errComponentRemaining           = errors.New("at least one component is still installed")
 	errFailedToEnsureFluxKubeconfig = errors.New("failed to generate or save Flux kubeconfig")
 	errFailedToApplyFluxRBAC        = errors.New("failed to apply Flux RBAC")
 	errInvalidExpirationOrBuffer    = errors.New("desired expiration and buffer are incompatible. make sure that desired expiration is greater than the buffer")
@@ -82,7 +80,7 @@ type CrossplaneReconciler struct {
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=crossplanes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=crossplanes/finalizers,verbs=update
 func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
+	log := log.FromContext(ctx)
 	newConditions := []metav1.Condition{}
 
 	// Fetch the Crossplane instance from the onboarding cluster
@@ -379,6 +377,7 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 	}
 }
 
+// SetLabel sets a label on the given object.
 func SetLabel(obj metav1.Object, label string, value string) {
 	labels := obj.GetLabels()
 	if labels == nil {
