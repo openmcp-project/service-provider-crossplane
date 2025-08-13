@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
+
 	v1alpha1 "github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 )
 

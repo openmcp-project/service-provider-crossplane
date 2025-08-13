@@ -7,6 +7,7 @@ require (
 	github.com/fluxcd/helm-controller/api v1.3.0
 	github.com/fluxcd/kustomize-controller/api v1.6.1
 	github.com/fluxcd/source-controller/api v1.6.2
+	github.com/go-logr/logr v1.4.3
 	github.com/openmcp-project/control-plane-operator v0.1.12
 	github.com/openmcp-project/controller-utils v0.15.0
 	github.com/openmcp-project/openmcp-operator/api v0.10.0
@@ -38,7 +39,6 @@ require (
 	github.com/fluxcd/pkg/apis/meta v1.13.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.8.0 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
