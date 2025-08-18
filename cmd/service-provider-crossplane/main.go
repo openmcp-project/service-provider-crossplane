@@ -112,8 +112,6 @@ func runInit(platformCluster *clusters.Cluster) {
 	if err := crdManager.CreateOrUpdateCRDs(ctx, logger); err != nil {
 		logger.Error(err, "Failed to create or update CRDs")
 	}
-
-	logger.Info("Init command completed successfully")
 }
 
 // nolint:gocyclo
