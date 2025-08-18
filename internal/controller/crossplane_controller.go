@@ -100,6 +100,8 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	// FIXME: handle finalizer
+
 	// Handle ProviderConfig as ReleaseChannel
 	resolverFn := r.GetResolverFunc(providerConfig)
 	ctx = rcontext.WithVersionResolver(ctx, resolverFn)
@@ -127,6 +129,7 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 	}
 
+	// TODO: use AccessRequest for Flux Kubeconfig
 	// Flux KubeConfig and RBAC TODO: Is this really needed?
 	if err := targetrbac.Apply(ctx, mcpCluster.Client(), v1beta1.ServiceAccountReference{
 		Name:      "openmcp-flux-deployer",
@@ -160,6 +163,8 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	condApi.SetStatusCondition(&newConditions, v1beta1.Available())
+
+	// FIXME: handle deletion of Crossplane instance
 
 	return ctrl.Result{}, nil
 }
