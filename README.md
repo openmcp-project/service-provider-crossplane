@@ -34,7 +34,7 @@ A `ProviderConfig` is an API where you can configure the installation of a Cross
 apiVersion: crossplane.services.openmcp.cloud/v1alpha1
 kind: ProviderConfig
 metadata:
-  name: providerconfig-sample
+  name: default
 spec:
   chart:
     repository: "https://charts.crossplane.io/stable"
