@@ -16,6 +16,7 @@ import (
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/components"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/fluxcd"
+
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
@@ -25,8 +26,13 @@ import (
 )
 
 const (
-	CrossplaneRelease       = "crossplane"
-	CrossplaneNamespace     = "crossplane-system"
+	// CrossplaneRelease is the name of the Helm release for Crossplane.
+	CrossplaneRelease = "crossplane"
+
+	// CrossplaneNamespace is the namespace where Crossplane is installed.
+	CrossplaneNamespace = "crossplane-system"
+
+	// ComponentNameCrossplane is the name of the Crossplane component.
 	ComponentNameCrossplane = "Crossplane"
 )
 
@@ -34,6 +40,7 @@ var _ fluxcd.FluxComponent = &Crossplane{}
 var _ components.TargetComponent = &Crossplane{}
 var _ components.PolicyRulesComponent = &Crossplane{}
 
+// Crossplane represents the Crossplane component configuration.
 type Crossplane struct {
 	Config    *v1alpha1.CrossplaneSpec
 	ChartSpec *v1beta1.ChartSpec
@@ -103,6 +110,7 @@ func (c *Crossplane) GetNamespace() string {
 	return CrossplaneNamespace
 }
 
+// IsInstallable implements FluxComponent.
 func (c *Crossplane) IsInstallable(ctx context.Context) (bool, error) {
 	rfn := rcontext.VersionResolver(ctx)
 	if _, err := rfn(CrossplaneRelease, c.Config.Version); err != nil {
@@ -111,6 +119,7 @@ func (c *Crossplane) IsInstallable(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// BuildSourceRepository implements FluxComponent.
 func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAdapter, error) {
 	rfn := rcontext.VersionResolver(ctx)
 	c.applyDefaultChartSpec(rfn)
@@ -131,6 +140,8 @@ func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAd
 	return adapter, nil
 }
 
+// BuildManifesto implements FluxComponent.
+//
 //nolint:dupl
 func (c *Crossplane) BuildManifesto(ctx context.Context) (fluxcd.Manifesto, error) {
 	if err := c.applyDefaultValues(); err != nil {
