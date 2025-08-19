@@ -49,6 +49,7 @@ func initOnboarding() {
 // initMCP registers the MCP schemes.
 func initMCP() {
 	utilruntime.Must(clientgoscheme.AddToScheme(MCP))
+	utilruntime.Must(apiextv1.AddToScheme(Onboarding))
 
 	// Crossplane
 	utilruntime.Must(crossplanev1.AddToScheme(MCP))
