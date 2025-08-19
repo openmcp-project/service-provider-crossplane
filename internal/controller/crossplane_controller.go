@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -28,8 +29,6 @@ import (
 	condApi "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,32 +37,32 @@ import (
 
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	providersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess"
-	"github.com/openmcp-project/openmcp-operator/lib/utils"
+	libutils "github.com/openmcp-project/openmcp-operator/lib/utils"
 
 	v1alpha1 "github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 	"github.com/openmcp-project/service-provider-crossplane/internal/scheme"
 	"github.com/openmcp-project/service-provider-crossplane/pkg/component"
 
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/kubeconfiggen"
-	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/targetrbac"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/fluxcd"
+	cpoutils "github.com/openmcp-project/control-plane-operator/pkg/utils"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 )
 
 var (
-	errFailedToEnsureFluxKubeconfig = errors.New("failed to generate or save Flux kubeconfig")
-	errFailedToApplyFluxRBAC        = errors.New("failed to apply Flux RBAC")
-	errInvalidExpirationOrBuffer    = errors.New("desired expiration and buffer are incompatible. make sure that desired expiration is greater than the buffer")
+	errComponentRemaining = errors.New("at least one component is still installed")
+
+	// Finalizer for Crossplane instance resources
+	Finalizer = providersv1alpha1.GroupVersion.Group + "/finalizers"
+
+	controllerName = v1alpha1.GroupVersion.Group
 )
 
 const (
-	keyKubeconfig = "kubeconfig"
-	keyExpiration = "expiresAt"
-
-	kubeconfigExpiration = 10 * time.Minute
-	kubeconfigBuffer     = 3 * time.Minute
+	requeueAfterError = 5 * time.Second
 )
 
 // CrossplaneReconciler reconciles a Crossplane object
@@ -90,6 +89,14 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	// Always update status
+	defer func() {
+		cpoutils.UpdateConditions(&crossplane.Status.Conditions, newConditions)
+		if err := r.OnboardingCluster.Client().Status().Update(ctx, crossplane); err != nil {
+			log.Error(err, "failed to update status from Crossplane CR at Onboarding cluster")
+		}
+	}()
+
 	log.Info("Reconciling Crossplane", "name", &crossplane.Name, "namespace", &crossplane.Namespace)
 
 	// Get ProviderConfig from Platform cluster
@@ -100,15 +107,19 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	// FIXME: handle finalizer
-
 	// Handle ProviderConfig as ReleaseChannel
 	resolverFn := r.GetResolverFunc(providerConfig)
 	ctx = rcontext.WithVersionResolver(ctx, resolverFn)
 
 	// ensure namespace on platform cluster
-	tenantNamespace := utils.StableRequestNamespace(req.Namespace)
+	tenantNamespace := libutils.StableRequestNamespace(req.Namespace)
 	ctx = rcontext.WithTenantNamespace(ctx, tenantNamespace)
+
+	if err := r.ensureFinalizer(ctx, crossplane); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// TODO: Ensure Finalizer is set on ManagedControlPlane resource at Onboarding
 
 	// Create ClusterRequest/AccessRequest
 	res, err := r.ClusterAccessReconciler.Reconcile(ctx, req)
@@ -129,28 +140,23 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 	}
 
-	// TODO: use AccessRequest for Flux Kubeconfig
-	// Flux KubeConfig and RBAC TODO: Is this really needed?
-	if err := targetrbac.Apply(ctx, mcpCluster.Client(), v1beta1.ServiceAccountReference{
-		Name:      "openmcp-flux-deployer",
-		Namespace: "openmcp-system",
-	}); err != nil {
-		return ctrl.Result{}, errors.Join(errFailedToApplyFluxRBAC, err)
+	// Get MCP AccessRequest to use for Flux
+	mcpAccessRequest := &clustersv1alpha1.AccessRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      libutils.StableRequestNameMCP(req.Name, controllerName),
+			Namespace: tenantNamespace,
+		},
 	}
 
-	// Ensure FluxKubeconfig is created or updated
-	fluxKubeconfig, err := r.ensureFluxKubeconfig(ctx, mcpCluster.RESTConfig(), tenantNamespace, v1beta1.ServiceAccountReference{
-		Name:      "openmcp-flux-deployer",
-		Namespace: "openmcp-system",
-	})
-	if err != nil {
-		return ctrl.Result{}, errors.Join(errFailedToEnsureFluxKubeconfig, err)
+	if err := r.PlatformCluster.Client().Get(ctx, client.ObjectKeyFromObject(mcpAccessRequest), mcpAccessRequest); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to get MCP AccessRequest: %w", err)
 	}
-	ctx = rcontext.WithFluxKubeconfigRef(ctx, fluxKubeconfig)
 
-	// Handle CreateOrUpdate
-	//    1. Ensure finalizer is set on Crossplane instance AND ManagedControlPlane resource at Onboarding
-	//    2. New Juggler
+	ctx = rcontext.WithFluxKubeconfigRef(ctx, (*corev1.SecretReference)(mcpAccessRequest.Status.SecretRef))
+
+	if !crossplane.DeletionTimestamp.IsZero() {
+		return r.deleteCrossplaneInstance(ctx, crossplane, mcpCluster.Client(), &newConditions)
+	}
 
 	conditions, err := r.createOrUpdateCrossplaneInstance(ctx, crossplane, mcpCluster.Client())
 	if err != nil {
@@ -164,9 +170,69 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	condApi.SetStatusCondition(&newConditions, v1beta1.Available())
 
-	// FIXME: handle deletion of Crossplane instance
+	return ctrl.Result{}, nil
+}
+
+func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client, newConditions *[]metav1.Condition) (ctrl.Result, error) {
+	if !r.hasFinalizer(xp) {
+		return ctrl.Result{}, nil
+	}
+
+	log := log.FromContext(ctx)
+
+	conditions, err := r.deleteControlPlaneComponents(ctx, xp, mcpClient)
+	// append collected conditions to Status
+	for _, c := range conditions {
+		condApi.SetStatusCondition(newConditions, c)
+	}
+	if errors.Is(err, errComponentRemaining) {
+		log.Info(err.Error())
+		return ctrl.Result{RequeueAfter: requeueAfterError}, nil
+	}
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.removeFinalizer(ctx, xp); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client) ([]metav1.Condition, error) {
+	// disable all components
+	xpCopy := xp.DeepCopy()
+	xpCopy.Spec = v1alpha1.CrossplaneSpec{}
+
+	j, err := r.newJuggler(ctx, xpCopy, mcpClient)
+	if err != nil {
+		return nil, err
+	}
+	result := j.Reconcile(ctx)
+
+	anyComponentRemaining := false
+	for _, cr := range result {
+		// do not count components that are marked as "keep on uninstall".
+		if kou, ok := cr.Component.(juggler.KeepOnUninstall); ok && kou.KeepOnUninstall() {
+			continue
+		}
+		// status must be "Disabled", otherwise the component is counted as "Remaining".
+		if cr.Result != juggler.StatusDisabled {
+			anyComponentRemaining = true
+		}
+	}
+
+	conditions := []metav1.Condition{}
+	for _, componentResult := range result {
+		conditions = append(conditions, componentResult.ToCondition())
+	}
+
+	if anyComponentRemaining {
+		return conditions, errComponentRemaining
+	}
+
+	return conditions, nil
 }
 
 func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Context, crossplane *v1alpha1.Crossplane, mcpClient client.Client) ([]metav1.Condition, error) {
@@ -226,7 +292,7 @@ func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, log
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *CrossplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.ClusterAccessReconciler = clusteraccess.NewClusterAccessReconciler(r.PlatformCluster.Client(), v1alpha1.GroupVersion.Group)
+	r.ClusterAccessReconciler = clusteraccess.NewClusterAccessReconciler(r.PlatformCluster.Client(), controllerName)
 	r.ClusterAccessReconciler.
 		WithMCPScheme(scheme.MCP).
 		WithRetryInterval(10 * time.Second).
@@ -244,104 +310,13 @@ func getMCPPermissions() []clustersv1alpha1.PermissionsRequest {
 		{
 			Rules: []rbac.PolicyRule{
 				{
-					APIGroups: []string{"apiextensions.k8s.io"},
-					Resources: []string{"customresourcedefinitions"},
-					Verbs:     defaultVerbs,
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"secrets", "configmaps"},
-					Verbs:     defaultVerbs,
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"serviceaccounts"},
-					Verbs:     defaultVerbs,
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"serviceaccounts/token"},
-					Verbs:     []string{"create"},
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"namespaces"},
-					Verbs:     defaultVerbs,
-				},
-				{
-					APIGroups: []string{"rbac.authorization.k8s.io"},
-					Resources: []string{"clusterroles", "clusterrolebindings"},
-					Verbs:     defaultVerbs,
-				},
-				{
-					APIGroups: []string{""},
-					Resources: []string{"events"},
-					Verbs:     defaultVerbs,
-				},
-				{
-					APIGroups: []string{"admissionregistration.k8s.io"},
-					Resources: []string{"validatingwebhookconfigurations"},
+					APIGroups: []string{"*"},
+					Resources: []string{"*"},
 					Verbs:     defaultVerbs,
 				},
 			},
 		},
 	}
-}
-
-func (r *CrossplaneReconciler) ensureFluxKubeconfig(ctx context.Context, mcpRestConfig *rest.Config, namespace string, saRef v1beta1.ServiceAccountReference) (*corev1.SecretReference, error) {
-	if kubeconfigBuffer >= kubeconfigExpiration {
-		return nil, errInvalidExpirationOrBuffer
-	}
-
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "flux-kubeconfig",
-			Namespace: namespace,
-		},
-	}
-	if err := r.PlatformCluster.Client().Get(ctx, client.ObjectKeyFromObject(secret), secret); client.IgnoreNotFound(err) != nil {
-		return nil, err
-	}
-
-	if secret.Data == nil {
-		secret.Data = map[string][]byte{}
-	}
-
-	if expirationStr, ok := secret.Data[keyExpiration]; ok {
-		expiration, err := time.Parse(time.RFC3339, string(expirationStr))
-		if err != nil {
-			return nil, err
-		}
-
-		if time.Now().Before(expiration.Add(-kubeconfigBuffer)) {
-			// kubeconfig is still valid
-			return &corev1.SecretReference{Name: secret.Name, Namespace: secret.Namespace}, nil
-		}
-	}
-
-	kubeconfig, expiration, err := r.Kubeconfiggen.ForServiceAccount(ctx, mcpRestConfig, saRef, kubeconfigExpiration)
-	if err != nil {
-		return nil, err
-	}
-
-	kubeconfigBytes, err := clientcmd.Write(*kubeconfig)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = controllerutil.CreateOrUpdate(ctx, r.PlatformCluster.Client(), secret, func() error {
-		SetLabel(secret, "app.kubernetes.io/managed-by", "service-provider-crossplane")
-
-		if secret.Data == nil {
-			secret.Data = map[string][]byte{}
-		}
-
-		secret.Data[keyKubeconfig] = kubeconfigBytes
-		secret.Data[keyExpiration] = []byte(expiration.Format(time.RFC3339))
-		return nil
-	})
-
-	return &corev1.SecretReference{Name: secret.Name, Namespace: secret.Namespace}, err
 }
 
 // GetResolverFunc is used to verify if the Crossplane instance configuration with its providers is valid.
@@ -390,4 +365,24 @@ func SetLabel(obj metav1.Object, label string, value string) {
 	}
 	labels[label] = value
 	obj.SetLabels(labels)
+}
+
+func (r *CrossplaneReconciler) ensureFinalizer(ctx context.Context, object client.Object) error {
+	updated := controllerutil.AddFinalizer(object, Finalizer)
+	if updated {
+		return r.OnboardingCluster.Client().Update(ctx, object)
+	}
+	return nil
+}
+
+func (r *CrossplaneReconciler) removeFinalizer(ctx context.Context, object client.Object) error {
+	updated := controllerutil.RemoveFinalizer(object, Finalizer)
+	if updated {
+		return r.OnboardingCluster.Client().Update(ctx, object)
+	}
+	return nil
+}
+
+func (r *CrossplaneReconciler) hasFinalizer(object client.Object) bool {
+	return controllerutil.ContainsFinalizer(object, Finalizer)
 }
