@@ -90,21 +90,49 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// Always update status
-	defer func() {
-		cpoutils.UpdateConditions(&crossplane.Status.Conditions, newConditions)
-		if err := r.OnboardingCluster.Client().Status().Update(ctx, crossplane); err != nil {
-			log.Error(err, "failed to update status from Crossplane CR at Onboarding cluster")
-		}
-	}()
+	defer r.updateStatus(ctx, crossplane, &newConditions)
 
-	log.Info("Reconciling Crossplane", "name", &crossplane.Name, "namespace", &crossplane.Namespace)
+	log.Info("Reconciling Crossplane", "name", crossplane.Name, "namespace", crossplane.Namespace)
 
+	// Setup reconciliation context
+	ctx, err := r.setupReconciliationContext(ctx, req)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Ensure finalizer is set
+	if err := r.ensureFinalizer(ctx, crossplane); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Setup cluster access
+	mcpCluster, result, err := r.setupClusterAccess(ctx, req)
+	if err != nil || result != nil {
+		return *result, err
+	}
+
+	// Setup Flux kubeconfig
+	ctx, err = r.setupFluxKubeconfig(ctx, req)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return r.reconcileCrossplaneInstance(ctx, crossplane, mcpCluster.Client(), &newConditions)
+}
+
+func (r *CrossplaneReconciler) updateStatus(ctx context.Context, crossplane *v1alpha1.Crossplane, newConditions *[]metav1.Condition) {
+	log := log.FromContext(ctx)
+	cpoutils.UpdateConditions(&crossplane.Status.Conditions, *newConditions)
+	if err := r.OnboardingCluster.Client().Status().Update(ctx, crossplane); err != nil {
+		log.Error(err, "failed to update status from Crossplane CR at Onboarding cluster")
+	}
+}
+
+func (r *CrossplaneReconciler) setupReconciliationContext(ctx context.Context, req ctrl.Request) (context.Context, error) {
 	// Get ProviderConfig from Platform cluster
 	providerConfig := &v1alpha1.ProviderConfig{}
 	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: "default"}, providerConfig); err != nil {
-		log.Error(err, "unable to fetch ProviderConfig", "name", "default")
-		// TODO: status update on Crossplane resource with "internal error occurred"?
-		return ctrl.Result{}, err
+		return ctx, fmt.Errorf("unable to fetch ProviderConfig 'default': %w", err)
 	}
 
 	// Handle ProviderConfig as ReleaseChannel
@@ -115,30 +143,38 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	tenantNamespace := libutils.StableRequestNamespace(req.Namespace)
 	ctx = rcontext.WithTenantNamespace(ctx, tenantNamespace)
 
-	if err := r.ensureFinalizer(ctx, crossplane); err != nil {
-		return ctrl.Result{}, err
-	}
+	return ctx, nil
+}
 
-	// TODO: Ensure Finalizer is set on ManagedControlPlane resource at Onboarding
+func (r *CrossplaneReconciler) setupClusterAccess(ctx context.Context, req ctrl.Request) (*clusters.Cluster, *ctrl.Result, error) {
+	log := log.FromContext(ctx)
 
 	// Create ClusterRequest/AccessRequest
 	res, err := r.ClusterAccessReconciler.Reconcile(ctx, req)
 	if err != nil {
 		log.Error(err, "failed to reconcile cluster access for crossplane instance")
-		return ctrl.Result{}, err
+		return nil, nil, err
 	}
 
 	// AccessRequest was created but not yet granted
 	if res.RequeueAfter > 0 {
-		return ctrl.Result{RequeueAfter: res.RequeueAfter}, nil
+		result := ctrl.Result{RequeueAfter: res.RequeueAfter}
+		return nil, &result, nil
 	}
 
 	// Get MCPCluster for Crossplane instance
 	mcpCluster, err := r.ClusterAccessReconciler.MCPCluster(ctx, req)
 	if err != nil {
 		log.Error(err, "failed to get MCP cluster for Crossplane instance")
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		result := ctrl.Result{RequeueAfter: 30 * time.Second}
+		return nil, &result, nil
 	}
+
+	return mcpCluster, nil, nil
+}
+
+func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl.Request) (context.Context, error) {
+	tenantNamespace := libutils.StableRequestNamespace(req.Namespace)
 
 	// Get MCP AccessRequest to use for Flux
 	mcpAccessRequest := &clustersv1alpha1.AccessRequest{
@@ -149,26 +185,30 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if err := r.PlatformCluster.Client().Get(ctx, client.ObjectKeyFromObject(mcpAccessRequest), mcpAccessRequest); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get MCP AccessRequest: %w", err)
+		return ctx, fmt.Errorf("failed to get MCP AccessRequest: %w", err)
 	}
 
 	ctx = rcontext.WithFluxKubeconfigRef(ctx, (*corev1.SecretReference)(mcpAccessRequest.Status.SecretRef))
+	return ctx, nil
+}
 
+func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, crossplane *v1alpha1.Crossplane, mcpClient client.Client, newConditions *[]metav1.Condition) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
+	// Handle deletion
 	if !crossplane.DeletionTimestamp.IsZero() {
-		return r.deleteCrossplaneInstance(ctx, crossplane, mcpCluster.Client(), &newConditions)
+		return r.deleteCrossplaneInstance(ctx, crossplane, mcpClient, newConditions)
 	}
 
-	conditions, err := r.createOrUpdateCrossplaneInstance(ctx, crossplane, mcpCluster.Client())
+	conditions, err := r.createOrUpdateCrossplaneInstance(ctx, crossplane, mcpClient)
 	if err != nil {
 		log.Error(err, "failed to create or update Crossplane instance")
 		return ctrl.Result{}, err
 	}
 
 	for _, c := range conditions {
-		condApi.SetStatusCondition(&newConditions, c)
+		condApi.SetStatusCondition(newConditions, c)
 	}
-
-	condApi.SetStatusCondition(&newConditions, v1beta1.Available())
 
 	return ctrl.Result{}, nil
 }
