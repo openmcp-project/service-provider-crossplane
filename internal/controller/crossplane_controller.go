@@ -81,7 +81,6 @@ type CrossplaneReconciler struct {
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=crossplanes/finalizers,verbs=update
 func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	newConditions := []metav1.Condition{}
 
 	// Fetch the Crossplane instance from the onboarding cluster
 	crossplane := &v1alpha1.Crossplane{}
@@ -91,9 +90,6 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		return ctrl.Result{}, err
 	}
-
-	// Always update status
-	defer r.updateStatus(ctx, crossplane, &newConditions)
 
 	log.Info("Reconciling Crossplane", "name", crossplane.Name, "namespace", crossplane.Namespace)
 
@@ -120,14 +116,17 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	return r.reconcileCrossplaneInstance(ctx, crossplane, mcpCluster.Client(), &newConditions)
+	return r.reconcileCrossplaneInstance(ctx, crossplane, mcpCluster.Client())
 }
 
 func (r *CrossplaneReconciler) updateStatus(ctx context.Context, crossplane *v1alpha1.Crossplane, newConditions *[]metav1.Condition) {
 	log := log.FromContext(ctx)
-	cpoutils.UpdateConditions(&crossplane.Status.Conditions, *newConditions)
-	if err := r.OnboardingCluster.Client().Status().Update(ctx, crossplane); err != nil {
-		log.Error(err, "failed to update status from Crossplane CR at Onboarding cluster")
+	changed := cpoutils.UpdateConditions(&crossplane.Status.Conditions, *newConditions)
+	if changed {
+		// TODO: do not try to update status when Crossplane CR is deleted
+		if err := r.OnboardingCluster.Client().Status().Update(ctx, crossplane); err != nil {
+			log.Error(err, "failed to update status from Crossplane CR at Onboarding cluster")
+		}
 	}
 }
 
@@ -195,12 +194,12 @@ func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl
 	return ctx, nil
 }
 
-func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, crossplane *v1alpha1.Crossplane, mcpClient client.Client, newConditions *[]metav1.Condition) (ctrl.Result, error) {
+func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, crossplane *v1alpha1.Crossplane, mcpClient client.Client) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	// Handle deletion
 	if !crossplane.DeletionTimestamp.IsZero() {
-		return r.deleteCrossplaneInstance(ctx, crossplane, mcpClient, newConditions)
+		return r.deleteCrossplaneInstance(ctx, crossplane, mcpClient)
 	}
 
 	conditions, err := r.createOrUpdateCrossplaneInstance(ctx, crossplane, mcpClient)
@@ -209,14 +208,18 @@ func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, 
 		return ctrl.Result{}, err
 	}
 
+	// Update status with new conditions
+	newConditions := []metav1.Condition{}
 	for _, c := range conditions {
-		condApi.SetStatusCondition(newConditions, c)
+		condApi.SetStatusCondition(&newConditions, c)
 	}
+
+	r.updateStatus(ctx, crossplane, &newConditions)
 
 	return ctrl.Result{}, nil
 }
 
-func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client, newConditions *[]metav1.Condition) (ctrl.Result, error) {
+func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client) (ctrl.Result, error) {
 	if !r.hasFinalizer(xp) {
 		return ctrl.Result{}, nil
 	}
@@ -224,10 +227,14 @@ func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, xp 
 	log := log.FromContext(ctx)
 
 	conditions, err := r.deleteControlPlaneComponents(ctx, xp, mcpClient)
-	// append collected conditions to Status
+
+	// Update status with current conditions
+	newConditions := []metav1.Condition{}
 	for _, c := range conditions {
-		condApi.SetStatusCondition(newConditions, c)
+		condApi.SetStatusCondition(&newConditions, c)
 	}
+	r.updateStatus(ctx, xp, &newConditions)
+
 	if errors.Is(err, errComponentRemaining) {
 		log.Info(err.Error())
 		return ctrl.Result{RequeueAfter: requeueAfterError}, nil
