@@ -60,7 +60,7 @@ func (*CrossplaneProvider) OrphanDetectorContext() object.DetectorContext {
 		ListType: &crossplanev1.ProviderList{},
 		FilterCriteria: object.FilterCriteria{
 			utils.IsManaged(),
-			client.HasLabels{"services.openmcp.cloud/component"},
+			utils.HasComponentLabel(),
 		},
 		ConvertFunc: func(list client.ObjectList) []juggler.Component {
 			providers := []juggler.Component{}

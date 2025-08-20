@@ -8,7 +8,7 @@ import (
 const (
 	labelManagedBy      = "app.kubernetes.io/managed-by"
 	labelManagedByValue = "service-provider-crossplane"
-	LabelComponentName  = "controlplane.core.orchestrate.cloud.sap/component"
+	LabelComponentName  = "services.openmcp.cloud/component"
 )
 
 // SetLabel sets a label on the given object.
