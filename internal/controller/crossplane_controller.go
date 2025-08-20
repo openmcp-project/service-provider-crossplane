@@ -344,11 +344,13 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, xp *v1alpha1.Cros
 }
 
 func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, logger logr.Logger, mcpClient client.Client) {
-	fr := fluxcd.NewFluxReconciler(logger, r.PlatformCluster.Client(), mcpClient)
+	fr := fluxcd.NewFluxReconciler(logger, r.PlatformCluster.Client(), mcpClient) // TODO: add component label
 	fr.RegisterType(
 		&component.Crossplane{},
 	)
 	juggler.RegisterReconciler(fr)
+
+	// TODO: add Object Reconciler
 }
 
 // SetupWithManager sets up the controller with the Manager.
