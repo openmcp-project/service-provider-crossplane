@@ -10,12 +10,13 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/components"
-	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/secretresolver"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/fluxcd"
+	"github.com/openmcp-project/control-plane-operator/pkg/juggler/object"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 )
@@ -48,6 +49,8 @@ type validationFunc func(t *testing.T, ctx context.Context, c juggler.Component)
 type targetValidationFunc func(t *testing.T, ctx context.Context, c components.TargetComponent)
 type fluxValidationFunc func(t *testing.T, ctx context.Context, c fluxcd.FluxComponent)
 type helmReleaseValidationFunc func(t *testing.T, ctx context.Context, h *fluxcd.HelmReleaseManifesto)
+type objectValidationFunc func(t *testing.T, ctx context.Context, c object.ObjectComponent)
+type orphanedObjectsDetectorValidationFunc func(t *testing.T, ctx context.Context, dc object.DetectorContext)
 
 func hasName(expected string) validationFunc {
 	return func(t *testing.T, ctx context.Context, c juggler.Component) {
@@ -80,12 +83,11 @@ func hasDependencies(count int) validationFunc {
 	}
 }
 
-func newContext(fn secretresolver.ResolveFunc, fn2 v1beta1.VersionResolverFn) context.Context {
+func newContext(fn v1beta1.VersionResolverFn) context.Context {
 	ctx := context.Background()
 	ctx = rcontext.WithTenantNamespace(ctx, tenantNamespace)
 	ctx = rcontext.WithFluxKubeconfigRef(ctx, &corev1.SecretReference{Name: fluxSecretRef.SecretRef.Name})
-	ctx = rcontext.WithSecretRefResolver(ctx, fn)
-	ctx = rcontext.WithVersionResolver(ctx, fn2)
+	ctx = rcontext.WithVersionResolver(ctx, fn)
 	return ctx
 }
 
@@ -165,5 +167,88 @@ func hasHelmValue(expected any, path ...string) helmReleaseValidationFunc {
 			assert.NoError(t, err)
 			assert.EqualValues(t, expected, actual)
 		}
+	}
+}
+
+func isObjectComponent(additionalValidations ...objectValidationFunc) validationFunc {
+	return func(t *testing.T, ctx context.Context, c juggler.Component) {
+		oc, ok := c.(object.ObjectComponent)
+		if !assert.True(t, ok, "not an ObjectComponent") {
+			return
+		}
+
+		for _, v := range additionalValidations {
+			v(t, ctx, oc)
+		}
+	}
+}
+
+func objectIsType(sample client.Object) objectValidationFunc {
+	return func(t *testing.T, ctx context.Context, c object.ObjectComponent) {
+		obj, _, err := c.BuildObjectToReconcile(ctx)
+		if !assert.NoError(t, err) {
+			return
+		}
+
+		assert.IsType(t, sample, obj)
+	}
+}
+
+func implementsOrphanedObjectsDetector(additionalValidations ...orphanedObjectsDetectorValidationFunc) objectValidationFunc {
+	return func(t *testing.T, ctx context.Context, c object.ObjectComponent) {
+		ood, ok := c.(object.OrphanedObjectsDetector)
+		if !assert.True(t, ok, "not a OrphanedObjectsDetector") {
+			return
+		}
+
+		for _, v := range additionalValidations {
+			v(t, ctx, ood.OrphanDetectorContext())
+		}
+	}
+}
+
+func listTypeIs(sample client.ObjectList) orphanedObjectsDetectorValidationFunc {
+	return func(t *testing.T, ctx context.Context, dc object.DetectorContext) {
+		assert.IsType(t, sample, dc.ListType)
+	}
+}
+
+func hasFilterCriteria(count int) orphanedObjectsDetectorValidationFunc {
+	return func(t *testing.T, ctx context.Context, dc object.DetectorContext) {
+		assert.Len(t, dc.FilterCriteria, count)
+	}
+}
+
+func canConvert(sample client.ObjectList, count int) orphanedObjectsDetectorValidationFunc {
+	return func(t *testing.T, ctx context.Context, dc object.DetectorContext) {
+		result := dc.ConvertFunc(sample)
+		assert.Len(t, result, count)
+	}
+}
+
+func canCheckSame(configured, detected juggler.Component, expected bool) orphanedObjectsDetectorValidationFunc {
+	return func(t *testing.T, ctx context.Context, dc object.DetectorContext) {
+		actual := dc.SameFunc(configured, detected)
+		assert.Equal(t, expected, actual, "components %s and %s are not the same", configured.GetName(), detected.GetName())
+	}
+}
+
+func canCheckHealthiness(sample client.Object, expected juggler.ResourceHealthiness) objectValidationFunc {
+	return func(t *testing.T, ctx context.Context, c object.ObjectComponent) {
+		actual := c.IsObjectHealthy(sample)
+		assert.Equal(t, expected, actual)
+	}
+}
+
+func canBuildAndReconcile(expectedErr error) objectValidationFunc {
+	return func(t *testing.T, ctx context.Context, c object.ObjectComponent) {
+		obj, _, err := c.BuildObjectToReconcile(ctx)
+		if err != nil {
+			assert.ErrorIs(t, err, expectedErr)
+			return
+		}
+
+		err = c.ReconcileObject(ctx, obj)
+		assert.Equal(t, expectedErr, err)
 	}
 }

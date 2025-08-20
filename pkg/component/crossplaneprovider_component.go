@@ -1,0 +1,144 @@
+package component
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	crossplanev1 "github.com/crossplane/crossplane/apis/pkg/v1"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/components"
+	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
+	"github.com/openmcp-project/control-plane-operator/pkg/juggler/object"
+	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
+	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
+	"github.com/openmcp-project/service-provider-crossplane/pkg/crossplane"
+	"github.com/openmcp-project/service-provider-crossplane/pkg/utils"
+)
+
+var _ object.ObjectComponent = &CrossplaneProvider{}
+var _ object.OrphanedObjectsDetector = &CrossplaneProvider{}
+var _ components.TargetComponent = &CrossplaneProvider{}
+
+type CrossplaneProvider struct {
+	Config  *v1alpha1.CrossplaneProviderConfig
+	Enabled bool
+}
+
+// BuildObjectToReconcile implements object.ObjectComponent.
+func (c *CrossplaneProvider) BuildObjectToReconcile(ctx context.Context) (client.Object, types.NamespacedName, error) {
+	obj, key := crossplane.EmptyFromConfig(*c.Config)
+	return obj, key, nil
+}
+
+// ReconcileObject implements object.ObjectComponent.
+func (c *CrossplaneProvider) ReconcileObject(ctx context.Context, obj client.Object) error {
+	versionResolveFn := rcontext.VersionResolver(ctx)
+
+	// Resolve package and version by provider name
+	comp, err := versionResolveFn(crossplane.ProviderNameForProviderConfig(c.Config), c.Config.Version)
+	if err != nil {
+		return err
+	}
+
+	objProvider := obj.(*crossplanev1.Provider)
+	utils.SetManagedBy(objProvider)
+	objProvider.Spec.Package = comp.DockerRef
+	objProvider.Spec.PackagePullPolicy = ptr.To(corev1.PullIfNotPresent)
+	return nil
+}
+
+// OrphanDetectorContext implements object.OrphanedObjectsDetector.
+func (*CrossplaneProvider) OrphanDetectorContext() object.DetectorContext {
+	return object.DetectorContext{
+		ListType: &crossplanev1.ProviderList{},
+		FilterCriteria: object.FilterCriteria{
+			utils.IsManaged(),
+			client.HasLabels{"services.openmcp.cloud/component"},
+		},
+		ConvertFunc: func(list client.ObjectList) []juggler.Component {
+			providers := []juggler.Component{}
+			for _, provider := range (list.(*crossplanev1.ProviderList)).Items {
+				// since we only need the name for the SameFunc, there is no need to copy the whole object
+				cp := &CrossplaneProvider{Config: &v1alpha1.CrossplaneProviderConfig{
+					Name: provider.Name,
+				}}
+				providers = append(providers, cp)
+			}
+			return providers
+		},
+		SameFunc: func(configured, detected juggler.Component) bool {
+			configuredP := configured.(*CrossplaneProvider)
+			detectedP := detected.(*CrossplaneProvider)
+			return configuredP.Config.Name == detectedP.Config.Name
+		},
+	}
+}
+
+// IsObjectHealthy implements object.ObjectComponent.
+func (c *CrossplaneProvider) IsObjectHealthy(obj client.Object) juggler.ResourceHealthiness {
+	provider := obj.(*crossplanev1.Provider)
+
+	installed := provider.GetCondition(crossplanev1.TypeInstalled)
+	if installed.Status != corev1.ConditionTrue {
+		return juggler.ResourceHealthiness{
+			Healthy: false,
+			Message: fmt.Sprintf("Provider installation is pending (%s). %s", installed.Reason, installed.Message),
+		}
+	}
+
+	healthy := provider.GetCondition(crossplanev1.TypeHealthy)
+	return juggler.ResourceHealthiness{
+		Healthy: healthy.Status == corev1.ConditionTrue,
+		Message: fmt.Sprintf("%s: %s", healthy.Reason, healthy.Message),
+	}
+}
+
+// GetNamespace implements TargetComponent.
+func (c *CrossplaneProvider) GetNamespace() string {
+	return CrossplaneNamespace
+}
+
+// IsInstallable implements Component.
+func (c *CrossplaneProvider) IsInstallable(ctx context.Context) (bool, error) {
+	rfn := rcontext.VersionResolver(ctx)
+	if _, err := rfn(crossplane.ProviderNameForProviderConfig(c.Config), c.Config.Version); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// GetName implements Component.
+func (c *CrossplaneProvider) GetName() string {
+	return formatProviderName(c.Config.Name)
+}
+
+// GetDependencies implements Component.
+func (c *CrossplaneProvider) GetDependencies() []juggler.Component {
+	return []juggler.Component{&Crossplane{}}
+}
+
+// IsEnabled implements Component.
+func (c *CrossplaneProvider) IsEnabled() bool {
+	return c.Enabled
+}
+
+// Hooks implements Component.
+func (*CrossplaneProvider) Hooks() juggler.ComponentHooks {
+	return juggler.ComponentHooks{}
+}
+
+func formatProviderName(providerName string) string {
+	providerName = crossplane.AddProviderPrefix(providerName)
+	parts := strings.Split(providerName, "-")
+	for i, part := range parts {
+		parts[i] = cases.Title(language.English).String(part)
+	}
+	return strings.Join(parts, "")
+}

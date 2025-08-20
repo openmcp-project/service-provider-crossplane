@@ -4,6 +4,7 @@ go 1.24.5
 
 require (
 	github.com/crossplane/crossplane v1.20.0
+	github.com/crossplane/crossplane-runtime v1.20.0
 	github.com/fluxcd/helm-controller/api v1.3.0
 	github.com/fluxcd/kustomize-controller/api v1.6.1
 	github.com/fluxcd/pkg/apis/meta v1.13.0
@@ -14,10 +15,13 @@ require (
 	github.com/openmcp-project/openmcp-operator/api v0.10.0
 	github.com/openmcp-project/openmcp-operator/lib v0.10.0
 	github.com/stretchr/testify v1.10.0
+	golang.org/x/text v0.27.0
+	gotest.tools/v3 v3.5.2
 	k8s.io/api v0.33.3
 	k8s.io/apiextensions-apiserver v0.33.3
 	k8s.io/apimachinery v0.33.3
 	k8s.io/client-go v0.33.3
+	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 	sigs.k8s.io/controller-runtime v0.21.0
 )
 
@@ -30,7 +34,6 @@ require (
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/crossplane/crossplane-runtime v1.20.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.12.1 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
@@ -92,7 +95,6 @@ require (
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/term v0.33.0 // indirect
-	golang.org/x/text v0.27.0 // indirect
 	golang.org/x/time v0.11.0 // indirect
 	golang.org/x/tools v0.35.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
@@ -108,7 +110,6 @@ require (
 	k8s.io/component-base v0.33.3 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect
-	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2 // indirect
 	sigs.k8s.io/controller-tools v0.16.5 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect

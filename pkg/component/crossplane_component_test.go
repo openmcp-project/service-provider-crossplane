@@ -66,7 +66,7 @@ func Test_Crossplane(t *testing.T) {
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			ctx := newContext(nil, tC.versionResolver)
+			ctx := newContext(tC.versionResolver)
 			c := &Crossplane{
 				Config: tC.config,
 				Values: tC.configValues,

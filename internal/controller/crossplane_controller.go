@@ -424,16 +424,6 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 	}
 }
 
-// SetLabel sets a label on the given object.
-func SetLabel(obj metav1.Object, label string, value string) {
-	labels := obj.GetLabels()
-	if labels == nil {
-		labels = map[string]string{}
-	}
-	labels[label] = value
-	obj.SetLabels(labels)
-}
-
 func (r *CrossplaneReconciler) ensureFinalizer(ctx context.Context, object client.Object) error {
 	updated := controllerutil.AddFinalizer(object, Finalizer)
 	if updated {
