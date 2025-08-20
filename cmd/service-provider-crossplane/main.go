@@ -81,7 +81,7 @@ func runInit(platformCluster *clusters.Cluster) {
 
 	logger.Info("Running init command")
 
-	clusterAccessManager := clusteraccess.NewClusterAccessManager(platformCluster.Client(), "crossplane.services.openmcp.cloud", "sp-crossplane-system")
+	clusterAccessManager := clusteraccess.NewClusterAccessManager(platformCluster.Client(), "crossplane.services.openmcp.cloud", os.Getenv("POD_NAMESPACE"))
 	clusterAccessManager.WithLogger(logger).
 		WithInterval(10 * time.Second).
 		WithTimeout(30 * time.Minute)
@@ -183,7 +183,7 @@ func main() {
 
 	ctx := context.Background()
 
-	clusterAccessManager := clusteraccess.NewClusterAccessManager(platformCluster.Client(), "crossplane.services.openmcp.cloud", "sp-crossplane-system")
+	clusterAccessManager := clusteraccess.NewClusterAccessManager(platformCluster.Client(), "crossplane.services.openmcp.cloud", os.Getenv("POD_NAMESPACE"))
 	clusterAccessManager.WithLogger(logger).
 		WithInterval(10 * time.Second).
 		WithTimeout(30 * time.Minute)
