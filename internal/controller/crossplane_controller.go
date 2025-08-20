@@ -24,6 +24,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
+	"github.com/openmcp-project/controller-utils/pkg/controller/smartrequeue"
 	corev1 "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -62,10 +63,6 @@ var (
 	controllerName = v1alpha1.GroupVersion.Group
 )
 
-const (
-	requeueAfterError = 5 * time.Second
-)
-
 // CrossplaneReconciler reconciles a Crossplane object
 type CrossplaneReconciler struct {
 	PlatformCluster         *clusters.Cluster
@@ -73,6 +70,7 @@ type CrossplaneReconciler struct {
 	ClusterAccessReconciler clusteraccess.Reconciler
 	Kubeconfiggen           kubeconfiggen.Generator
 	Recorder                record.EventRecorder
+	RequeueStore            *smartrequeue.Store
 }
 
 // Reconcile reconciles the Crossplane instance.
@@ -91,29 +89,36 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	// Get smart requeue entry for this object
+	requeueEntry := r.RequeueStore.For(crossplane)
+	ctx = smartrequeue.NewContext(ctx, requeueEntry)
+
 	log.Info("Reconciling Crossplane", "name", crossplane.Name, "namespace", crossplane.Namespace)
 
 	// Setup reconciliation context
 	ctx, err := r.setupReconciliationContext(ctx, req)
 	if err != nil {
-		return ctrl.Result{}, err
+		return requeueEntry.Error(err)
 	}
 
 	// Ensure finalizer is set
 	if err := r.ensureFinalizer(ctx, crossplane); err != nil {
-		return ctrl.Result{}, err
+		return requeueEntry.Error(err)
 	}
 
 	// Setup cluster access
 	mcpCluster, result, err := r.setupClusterAccess(ctx, req)
-	if err != nil || result != nil {
-		return *result, err
+	if err != nil {
+		return requeueEntry.Error(err)
+	}
+	if result != nil {
+		return requeueEntry.Backoff()
 	}
 
 	// Setup Flux kubeconfig
 	ctx, err = r.setupFluxKubeconfig(ctx, req)
 	if err != nil {
-		return ctrl.Result{}, err
+		return requeueEntry.Error(err)
 	}
 
 	return r.reconcileCrossplaneInstance(ctx, crossplane, mcpCluster.Client())
@@ -196,6 +201,7 @@ func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl
 
 func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, crossplane *v1alpha1.Crossplane, mcpClient client.Client) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
+	requeueEntry := smartrequeue.FromContext(ctx)
 
 	// Handle deletion
 	if !crossplane.DeletionTimestamp.IsZero() {
@@ -205,7 +211,7 @@ func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, 
 	conditions, err := r.createOrUpdateCrossplaneInstance(ctx, crossplane, mcpClient)
 	if err != nil {
 		log.Error(err, "failed to create or update Crossplane instance")
-		return ctrl.Result{}, err
+		return requeueEntry.Error(err)
 	}
 
 	// Update status with new conditions
@@ -216,12 +222,16 @@ func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, 
 
 	r.updateStatus(ctx, crossplane, &newConditions)
 
-	return ctrl.Result{}, nil
+	// Successfully reconciled - reset the requeue backoff
+	return requeueEntry.Reset()
 }
 
 func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client) (ctrl.Result, error) {
+	requeueEntry := smartrequeue.FromContext(ctx)
+
 	if !r.hasFinalizer(xp) {
-		return ctrl.Result{}, nil
+		// No finalizer, nothing to do - delete completed
+		return requeueEntry.Never()
 	}
 
 	log := log.FromContext(ctx)
@@ -237,17 +247,18 @@ func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, xp 
 
 	if errors.Is(err, errComponentRemaining) {
 		log.Info(err.Error())
-		return ctrl.Result{RequeueAfter: requeueAfterError}, nil
+		return requeueEntry.Backoff()
 	}
 	if err != nil {
-		return ctrl.Result{}, err
+		return requeueEntry.Error(err)
 	}
 
 	if err := r.removeFinalizer(ctx, xp); err != nil {
-		return ctrl.Result{}, err
+		return requeueEntry.Error(err)
 	}
 
-	return ctrl.Result{}, nil
+	// Deletion completed successfully
+	return requeueEntry.Never()
 }
 
 func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client) ([]metav1.Condition, error) {
@@ -347,6 +358,12 @@ func (r *CrossplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithMCPScheme(scheme.MCP).
 		WithRetryInterval(10 * time.Second).
 		WithMCPPermissions(getMCPPermissions())
+
+	// Initialize smart requeue store with sensible defaults:
+	// - Min interval: 5 seconds (quick retry for transient issues)
+	// - Max interval: 5 minutes (cap on maximum wait time)
+	// - Multiplier: 2.0 (exponential backoff with doubling)
+	r.RequeueStore = smartrequeue.NewStore(5*time.Second, 5*time.Minute, 2.0)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Crossplane{}).
