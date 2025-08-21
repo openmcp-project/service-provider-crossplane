@@ -329,7 +329,10 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, xp *v1alpha1.Cros
 	comps = append(comps, xpComp)
 	if xp.Spec.Providers != nil {
 		for _, provider := range xp.Spec.Providers {
-			xpp := &component.CrossplaneProvider{Config: provider}
+			xpp := &component.CrossplaneProvider{
+				Config:  provider,
+				Enabled: xpComp.IsEnabled(),
+			}
 			comps = append(comps, xpp)
 		}
 	}
