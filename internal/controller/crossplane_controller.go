@@ -50,6 +50,8 @@ import (
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/kubeconfiggen"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/fluxcd"
+	"github.com/openmcp-project/control-plane-operator/pkg/juggler/object"
+	"github.com/openmcp-project/control-plane-operator/pkg/utils"
 	cpoutils "github.com/openmcp-project/control-plane-operator/pkg/utils"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 )
@@ -344,13 +346,17 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, xp *v1alpha1.Cros
 }
 
 func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, logger logr.Logger, mcpClient client.Client) {
-	fr := fluxcd.NewFluxReconciler(logger, r.PlatformCluster.Client(), mcpClient) // TODO: add component label
+	fr := fluxcd.NewFluxReconciler(logger, r.PlatformCluster.Client(), mcpClient, utils.LabelComponentName)
 	fr.RegisterType(
 		&component.Crossplane{},
 	)
 	juggler.RegisterReconciler(fr)
 
-	// TODO: add Object Reconciler
+	or := object.NewReconciler(logger, mcpClient, utils.LabelComponentName)
+	or.RegisterType(
+		&component.CrossplaneProvider{},
+	)
+	juggler.RegisterReconciler(or)
 }
 
 // SetupWithManager sets up the controller with the Manager.
