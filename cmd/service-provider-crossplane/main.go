@@ -26,7 +26,6 @@ import (
 
 	rbacv1 "k8s.io/api/rbac/v1"
 
-	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/kubeconfiggen"
 	crdutil "github.com/openmcp-project/controller-utils/pkg/crds"
 	openmcpconstv1alpha1 "github.com/openmcp-project/openmcp-operator/api/constants"
 
@@ -307,7 +306,6 @@ func main() {
 	if err := (&controller.CrossplaneReconciler{
 		PlatformCluster:   platformCluster,
 		OnboardingCluster: onboardingCluster,
-		Kubeconfiggen:     &kubeconfiggen.Default{},
 		Recorder:          mgr.GetEventRecorderFor("sp-crossplane-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		logger.Error(err, "unable to create controller", "controller", "Crossplane")

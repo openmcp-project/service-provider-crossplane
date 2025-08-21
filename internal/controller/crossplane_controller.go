@@ -48,7 +48,6 @@ import (
 	"github.com/openmcp-project/service-provider-crossplane/pkg/component"
 	sputils "github.com/openmcp-project/service-provider-crossplane/pkg/utils"
 
-	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/kubeconfiggen"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/fluxcd"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/object"
@@ -70,7 +69,6 @@ type CrossplaneReconciler struct {
 	PlatformCluster         *clusters.Cluster
 	OnboardingCluster       *clusters.Cluster
 	ClusterAccessReconciler clusteraccess.Reconciler
-	Kubeconfiggen           kubeconfiggen.Generator
 	Recorder                record.EventRecorder
 	RequeueStore            *smartrequeue.Store
 }
