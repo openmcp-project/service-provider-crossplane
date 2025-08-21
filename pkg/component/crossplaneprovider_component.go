@@ -137,7 +137,6 @@ func (*CrossplaneProvider) Hooks() juggler.ComponentHooks {
 }
 
 func formatProviderName(providerName string) string {
-	providerName = crossplane.AddProviderPrefix(providerName)
 	parts := strings.Split(providerName, "-")
 	for i, part := range parts {
 		parts[i] = cases.Title(language.English).String(part)

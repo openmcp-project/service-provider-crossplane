@@ -83,19 +83,19 @@ func Test_formatProviderName(t *testing.T) {
 		},
 		{
 			providerName: "kubernetes",
-			expected:     "ProviderKubernetes",
+			expected:     "Kubernetes",
 		},
 		{
 			providerName: "a",
-			expected:     "ProviderA",
+			expected:     "A",
 		},
 		{
-			providerName: "provider-btp-account",
-			expected:     "ProviderBtpAccount",
+			providerName: "provider-abc-xyz",
+			expected:     "ProviderAbcXyz",
 		},
 		{
-			providerName: "btp-account",
-			expected:     "ProviderBtpAccount",
+			providerName: "abc-xyz",
+			expected:     "AbcXyz",
 		},
 	}
 	for _, tC := range testCases {
@@ -166,7 +166,7 @@ func Test_CrossplaneProvider(t *testing.T) {
 				return v1beta1.ComponentVersion{}, errFake
 			},
 			validationFuncs: []validationFunc{
-				hasName("ProviderKubernetes"),
+				hasName("Kubernetes"),
 				isEnabled(true),
 				isAllowed(false),
 			},
