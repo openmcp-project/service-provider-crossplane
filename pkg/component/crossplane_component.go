@@ -8,7 +8,6 @@ import (
 
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -38,71 +37,12 @@ const (
 
 var _ fluxcd.FluxComponent = &Crossplane{}
 var _ components.TargetComponent = &Crossplane{}
-var _ components.PolicyRulesComponent = &Crossplane{}
 
 // Crossplane represents the Crossplane component configuration.
 type Crossplane struct {
 	Config    *v1alpha1.CrossplaneSpec
 	ChartSpec *v1beta1.ChartSpec
 	Values    *apiextensionsv1.JSON `json:"values,omitempty"`
-}
-
-// GetPolicyRules implements PolicyRulesComponent.
-func (c *Crossplane) GetPolicyRules() components.PolicyRules {
-	rules := components.PolicyRules{
-		Admin: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"pkg.crossplane.io"},
-				Resources: []string{
-					"configurations",
-					"functions",
-					"providers",
-				},
-				Verbs: components.VerbsAdmin,
-			},
-			{
-				APIGroups: []string{"apiextensions.crossplane.io"},
-				Resources: []string{
-					"compositeresourcedefinitions",
-					"compositions",
-					"environmentconfigs",
-				},
-				Verbs: components.VerbsAdmin,
-			},
-			{
-				APIGroups: []string{"pkg.crossplane.io"},
-				Resources: []string{rbacv1.ResourceAll},
-				Verbs:     components.VerbsView,
-			},
-			{
-				APIGroups: []string{"apiextensions.crossplane.io"},
-				Resources: []string{rbacv1.ResourceAll},
-				Verbs:     components.VerbsView,
-			},
-		},
-		View: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"pkg.crossplane.io"},
-				Resources: []string{rbacv1.ResourceAll},
-				Verbs:     components.VerbsView,
-			},
-			{
-				APIGroups: []string{"apiextensions.crossplane.io"},
-				Resources: []string{rbacv1.ResourceAll},
-				Verbs:     components.VerbsView,
-			},
-		},
-	}
-
-	rules.Admin = append(rules.Admin, rbacv1.PolicyRule{
-		APIGroups: []string{"pkg.crossplane.io"},
-		Resources: []string{
-			"deploymentruntimeconfigs",
-		},
-		Verbs: components.VerbsModify,
-	})
-
-	return rules
 }
 
 // GetNamespace implements TargetComponent.
