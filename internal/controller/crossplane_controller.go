@@ -320,12 +320,21 @@ func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Cont
 
 func (r *CrossplaneReconciler) newJuggler(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client) (*juggler.Juggler, error) {
 	logger := log.FromContext(ctx)
+	comps := []juggler.Component{}
 	jug := juggler.NewJuggler(logger, juggler.NewEventRecorder(r.Recorder, xp))
 
 	xpComp := &component.Crossplane{
 		Config: &xp.Spec,
 	}
-	jug.RegisterComponent(xpComp)
+	comps = append(comps, xpComp)
+	if xp.Spec.Providers != nil {
+		for _, provider := range xp.Spec.Providers {
+			xpp := &component.CrossplaneProvider{Config: provider}
+			comps = append(comps, xpp)
+		}
+	}
+
+	jug.RegisterComponent(comps...)
 
 	r.registerReconcilers(jug, logger, mcpClient)
 
