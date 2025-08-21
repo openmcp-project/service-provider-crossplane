@@ -20,7 +20,6 @@ import (
 
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/hooks"
-	"github.com/openmcp-project/control-plane-operator/pkg/utils"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 )
 
@@ -160,11 +159,6 @@ func (c *Crossplane) applyDefaultValues() error {
 		if err := json.Unmarshal(c.Values.Raw, &values); err != nil {
 			return err
 		}
-	}
-
-	// Apply defaults
-	if err := utils.SetNestedDefault(values, true, "rbacManager", "skipAggregatedClusterRoles"); err != nil {
-		return err
 	}
 
 	// Write updated values
