@@ -21,6 +21,7 @@ func EmptyFromConfig(c v1alpha1.CrossplaneProviderConfig) (*crossplanev1.Provide
 	}
 }
 
+// AddProviderPrefix adds the provider prefix to the provider name if it is not already present.
 func AddProviderPrefix(providerName string) string {
 	if strings.HasPrefix(providerName, providerPrefix) {
 		return providerName

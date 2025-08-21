@@ -17,6 +17,7 @@ import (
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/object"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
+
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 	"github.com/openmcp-project/service-provider-crossplane/pkg/crossplane"
 	"github.com/openmcp-project/service-provider-crossplane/pkg/utils"
@@ -26,13 +27,14 @@ var _ object.ObjectComponent = &CrossplaneProvider{}
 var _ object.OrphanedObjectsDetector = &CrossplaneProvider{}
 var _ components.TargetComponent = &CrossplaneProvider{}
 
+// CrossplaneProvider represents a Crossplane provider configuration for a Crossplane instance.
 type CrossplaneProvider struct {
 	Config  *v1alpha1.CrossplaneProviderConfig
 	Enabled bool
 }
 
 // BuildObjectToReconcile implements object.ObjectComponent.
-func (c *CrossplaneProvider) BuildObjectToReconcile(ctx context.Context) (client.Object, types.NamespacedName, error) {
+func (c *CrossplaneProvider) BuildObjectToReconcile(_ context.Context) (client.Object, types.NamespacedName, error) {
 	obj, key := crossplane.EmptyFromConfig(*c.Config)
 	return obj, key, nil
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
+
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 )
 
