@@ -5,8 +5,9 @@ import (
 
 	crossplanev1 "github.com/crossplane/crossplane/apis/pkg/v1"
 
-	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 )
 
 func TestProviderNameForProviderConfig(t *testing.T) {
