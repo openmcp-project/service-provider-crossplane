@@ -19,12 +19,12 @@ TODO
 ### OpenMCP Landscape
 
 ```yaml
-apiVersion: services.openmcp.cloud/v1alpha1
+apiVersion: openmcp.cloud/v1alpha1
 kind: ServiceProvider
 metadata:
   name: crossplane
 spec:
-  image: ghcr.io/openmcp-project/images/service-provicer-crossplane:<version>
+  image: ghcr.io/openmcp-project/images/service-provider-crossplane:<latest-version>
 ```
 
 ## Configure a `ProviderConfig`
@@ -43,16 +43,10 @@ spec:
       - v1.20.0
       - v1.19.0
   availableProviders:
-    - name: provider-kuberentes
-      package: xpkg.upbound.io/provider-kubernetes
+    - name: provider-kubernetes
+      package: xpkg.upbound.io/upbound/provider-kubernetes
       versions:
-        - v0.18.0
-        - v0.17.0
-    - name: provider-btp
-      package: ghcr.io/sap/crossplane-provider-btp
-      versions:
-        - v1.0.0
-        - v0.0.9
+        - v0.16.0
 ```
 
 ### Install a Crossplane instance
@@ -67,7 +61,7 @@ spec:
   version: v1.20.0
   providers:
     - name: provider-kubernetes
-      version: v0.18.0
+      version: v0.16.0
 ```
 
 ## Development
