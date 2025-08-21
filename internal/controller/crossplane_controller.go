@@ -305,17 +305,8 @@ func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Cont
 	}
 	result := j.Reconcile(ctx)
 
-	enabledComponents := 0
-	healthyComponents := 0
 	conditions := []metav1.Condition{}
 	for _, componentResult := range result {
-		if componentResult.Component.IsEnabled() {
-			enabledComponents++
-		}
-		if componentResult.Result == juggler.StatusHealthy {
-			healthyComponents++
-		}
-
 		if !componentResult.Component.IsEnabled() && componentResult.Result == juggler.StatusDisabled {
 			// Component is not enabled and has been successfully uninstalled (or has never been installed).
 			// Don't output a condition in this case.
