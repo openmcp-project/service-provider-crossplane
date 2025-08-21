@@ -51,7 +51,7 @@ func (c *CrossplaneProvider) ReconcileObject(ctx context.Context, obj client.Obj
 
 	objProvider := obj.(*crossplanev1.Provider)
 	utils.SetManagedBy(objProvider)
-	objProvider.Spec.Package = comp.DockerRef
+	objProvider.Spec.Package = formatPackage(comp.DockerRef, comp.Version)
 	objProvider.Spec.PackagePullPolicy = ptr.To(corev1.PullIfNotPresent)
 	return nil
 }
@@ -143,4 +143,8 @@ func formatProviderName(providerName string) string {
 		parts[i] = cases.Title(language.English).String(part)
 	}
 	return strings.Join(parts, "")
+}
+
+func formatPackage(dockerRef string, version string) string {
+	return fmt.Sprintf("%s:%s", dockerRef, version)
 }
