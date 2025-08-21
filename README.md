@@ -46,7 +46,7 @@ spec:
   image: ghcr.io/openmcp-project/images/service-provider-crossplane:<latest-version> # latest upstream version
 ```
 
-## 🚀 Using Service Provider Crossplane
+## 📖 Usage
 
 ### Configure a `ProviderConfig`
 A `ProviderConfig` is an API where you can configure the installation of a Crossplane instance in your `ManagedControlPlane`.
