@@ -1,9 +1,16 @@
 apiVersion: crossplane.services.openmcp.cloud/v1alpha1
 kind: ProviderConfig
 metadata:
-  name: providerconfig-sample
+  name: default
 spec:
   chart:
-    repository: "https://charts.openmcp.cloud"
-    name: chart
-    version: v1.0.0
+    repository: "https://charts.crossplane.io/stable"
+    name: crossplane
+    availableVersions:
+      - v1.20.0
+      - v1.19.0
+  availableProviders:
+    - name: provider-kubernetes
+      package: xpkg.upbound.io/upbound/provider-kubernetes
+      versions:
+        - v0.16.0

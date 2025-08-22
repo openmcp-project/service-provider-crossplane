@@ -19,18 +19,20 @@ package controller
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	crossplaneservicesopenmcpcloudv1alpha1 "github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
+	"github.com/openmcp-project/controller-utils/pkg/clusters"
+
+	v1alpha1 "github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 )
 
 // ProviderConfigReconciler reconciles a ProviderConfig object
 type ProviderConfigReconciler struct {
-	client.Client
-	Scheme *runtime.Scheme
+	PlatformCluster   *clusters.Cluster
+	OnboardingCluster *clusters.Cluster
 }
 
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=providerconfigs,verbs=get;list;watch;create;update;patch;delete
@@ -47,7 +49,7 @@ type ProviderConfigReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *ProviderConfigReconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	_ = log.FromContext(ctx)
 
 	// TODO(user): your logic here
 
@@ -57,7 +59,7 @@ func (r *ProviderConfigReconciler) Reconcile(ctx context.Context, _ ctrl.Request
 // SetupWithManager sets up the controller with the Manager.
 func (r *ProviderConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&crossplaneservicesopenmcpcloudv1alpha1.ProviderConfig{}).
+		WatchesRawSource(source.Kind(r.PlatformCluster.Cluster().GetCache(), &v1alpha1.ProviderConfig{}, &handler.TypedEnqueueRequestForObject[*v1alpha1.ProviderConfig]{})).
 		Named("providerconfig").
 		Complete(r)
 }
