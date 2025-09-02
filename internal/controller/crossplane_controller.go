@@ -39,6 +39,7 @@ import (
 
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 	providersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess"
 	libutils "github.com/openmcp-project/openmcp-operator/lib/utils"
@@ -366,7 +367,8 @@ func (r *CrossplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.ClusterAccessReconciler.
 		WithMCPScheme(scheme.MCP).
 		WithRetryInterval(10 * time.Second).
-		WithMCPPermissions(getMCPPermissions())
+		WithMCPPermissions(getMCPPermissions()).
+		WithMCPRoleRefs(getMCPRoleRefs())
 
 	// Initialize smart requeue store with sensible defaults:
 	// - Min interval: 5 seconds (quick retry for transient issues)
@@ -391,6 +393,15 @@ func getMCPPermissions() []clustersv1alpha1.PermissionsRequest {
 					Verbs:     defaultVerbs,
 				},
 			},
+		},
+	}
+}
+
+func getMCPRoleRefs() []commonapi.RoleRef {
+	return []commonapi.RoleRef{
+		{
+			Kind: "ClusterRole",
+			Name: "cluster-admin",
 		},
 	}
 }
