@@ -148,7 +148,10 @@ func (r *CrossplaneReconciler) setupReconciliationContext(ctx context.Context, r
 	ctx = rcontext.WithVersionResolver(ctx, resolverFn)
 
 	// ensure namespace on platform cluster
-	tenantNamespace := libutils.StableRequestNamespace(req.Namespace)
+	tenantNamespace, err := libutils.StableMCPNamespace(req.Name, req.Namespace)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to determine stable namespace for Crossplane instance: %w", err)
+	}
 	ctx = rcontext.WithTenantNamespace(ctx, tenantNamespace)
 
 	return ctx, nil
@@ -182,12 +185,15 @@ func (r *CrossplaneReconciler) setupClusterAccess(ctx context.Context, req ctrl.
 }
 
 func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl.Request) (context.Context, error) {
-	tenantNamespace := libutils.StableRequestNamespace(req.Namespace)
+	tenantNamespace, err := libutils.StableMCPNamespace(req.Name, req.Namespace)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to determine stable namespace for Crossplane instance: %w", err)
+	}
 
 	// Get MCP AccessRequest to use for Flux
 	mcpAccessRequest := &clustersv1alpha1.AccessRequest{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      libutils.StableRequestNameMCP(req.Name, controllerName),
+			Name:      clusteraccess.StableRequestName(controllerName, req),
 			Namespace: tenantNamespace,
 		},
 	}
