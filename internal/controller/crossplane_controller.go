@@ -65,6 +65,10 @@ var (
 	controllerName = v1alpha1.GroupVersion.Group
 )
 
+const (
+	requestSuffixMCP = "--mcp"
+)
+
 // CrossplaneReconciler reconciles a Crossplane object
 type CrossplaneReconciler struct {
 	PlatformCluster         *clusters.Cluster
@@ -193,7 +197,7 @@ func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl
 	// Get MCP AccessRequest to use for Flux
 	mcpAccessRequest := &clustersv1alpha1.AccessRequest{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusteraccess.StableRequestName(controllerName, req),
+			Name:      clusteraccess.StableRequestName(controllerName, req) + requestSuffixMCP,
 			Namespace: tenantNamespace,
 		},
 	}
