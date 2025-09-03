@@ -39,6 +39,7 @@ import (
 
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 	providersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess"
 	libutils "github.com/openmcp-project/openmcp-operator/lib/utils"
@@ -147,7 +148,10 @@ func (r *CrossplaneReconciler) setupReconciliationContext(ctx context.Context, r
 	ctx = rcontext.WithVersionResolver(ctx, resolverFn)
 
 	// ensure namespace on platform cluster
-	tenantNamespace := libutils.StableRequestNamespace(req.Namespace)
+	tenantNamespace, err := libutils.StableMCPNamespace(req.Name, req.Namespace)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to determine stable namespace for Crossplane instance: %w", err)
+	}
 	ctx = rcontext.WithTenantNamespace(ctx, tenantNamespace)
 
 	return ctx, nil
@@ -181,12 +185,15 @@ func (r *CrossplaneReconciler) setupClusterAccess(ctx context.Context, req ctrl.
 }
 
 func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl.Request) (context.Context, error) {
-	tenantNamespace := libutils.StableRequestNamespace(req.Namespace)
+	tenantNamespace, err := libutils.StableMCPNamespace(req.Name, req.Namespace)
+	if err != nil {
+		return ctx, fmt.Errorf("failed to determine stable namespace for Crossplane instance: %w", err)
+	}
 
 	// Get MCP AccessRequest to use for Flux
 	mcpAccessRequest := &clustersv1alpha1.AccessRequest{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      libutils.StableRequestNameMCP(req.Name, controllerName),
+			Name:      clusteraccess.StableRequestName(controllerName, req),
 			Namespace: tenantNamespace,
 		},
 	}
@@ -366,7 +373,8 @@ func (r *CrossplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.ClusterAccessReconciler.
 		WithMCPScheme(scheme.MCP).
 		WithRetryInterval(10 * time.Second).
-		WithMCPPermissions(getMCPPermissions())
+		WithMCPPermissions(getMCPPermissions()).
+		WithMCPRoleRefs(getMCPRoleRefs())
 
 	// Initialize smart requeue store with sensible defaults:
 	// - Min interval: 5 seconds (quick retry for transient issues)
@@ -391,6 +399,15 @@ func getMCPPermissions() []clustersv1alpha1.PermissionsRequest {
 					Verbs:     defaultVerbs,
 				},
 			},
+		},
+	}
+}
+
+func getMCPRoleRefs() []commonapi.RoleRef {
+	return []commonapi.RoleRef{
+		{
+			Kind: "ClusterRole",
+			Name: "cluster-admin",
 		},
 	}
 }
