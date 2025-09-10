@@ -11,3 +11,5 @@ includes:
       COMPONENTS: 'service-provider-crossplane'
       REPO_URL: 'https://github.com/openmcp-project/service-provider-crossplane'
       CHART_COMPONENTS: "[]"
+      CRDS_COMPONENTS: 'service-provider-crossplane'
+      CRDS_PATH: '{{.ROOT_DIR}}/api/crds/manifests'
