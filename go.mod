@@ -12,8 +12,8 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/openmcp-project/control-plane-operator v0.1.16
 	github.com/openmcp-project/controller-utils v0.22.0
-	github.com/openmcp-project/openmcp-operator/api v0.13.1
-	github.com/openmcp-project/openmcp-operator/lib v0.13.1
+	github.com/openmcp-project/openmcp-operator/api v0.15.1
+	github.com/openmcp-project/openmcp-operator/lib v0.15.1
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/text v0.29.0
 	gotest.tools/v3 v3.5.2
