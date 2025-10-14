@@ -13,11 +13,12 @@ import (
 
 func Test_Crossplane(t *testing.T) {
 	testCases := []struct {
-		desc            string
-		config          *v1alpha1.CrossplaneSpec
-		configValues    *apiextensionsv1.JSON
-		versionResolver v1beta1.VersionResolverFn
-		validationFuncs []validationFunc
+		desc                 string
+		config               *v1alpha1.CrossplaneSpec
+		configValues         *apiextensionsv1.JSON
+		imagePullSecretNames []string
+		versionResolver      v1beta1.VersionResolverFn
+		validationFuncs      []validationFunc
 	}{
 		{
 			desc: "should be disabled",
@@ -43,8 +44,9 @@ func Test_Crossplane(t *testing.T) {
 			config: &v1alpha1.CrossplaneSpec{
 				Version: "1.2.3",
 			},
-			configValues:    &apiextensionsv1.JSON{Raw: []byte(`{"replicas":2}`)},
-			versionResolver: fakeVersionResolver(false),
+			configValues:         &apiextensionsv1.JSON{Raw: []byte(`{"replicas":2}`)},
+			imagePullSecretNames: []string{"secret-1", "secret-2"},
+			versionResolver:      fakeVersionResolver(false),
 			validationFuncs: []validationFunc{
 				hasName("Crossplane"),
 				isEnabled(true),
@@ -52,13 +54,15 @@ func Test_Crossplane(t *testing.T) {
 				hasPreUninstallHook(),
 				hasDependencies(0),
 				isTargetComponent(
-					hasNamespace("crossplane-system"),
+					hasNamespace(CrossplaneNamespace),
 				),
 				isFluxComponent(
 					returnsHelmRepo(),
 					returnsHelmRelease(
 						hasKubeconfigRef(),
 						hasHelmValue(2, "replicas"), // custom value
+						hasHelmValue("secret-1", "imagePullSecrets", "0", "name"),
+						hasHelmValue("secret-2", "imagePullSecrets", "1", "name"),
 					),
 				),
 			},
@@ -68,8 +72,9 @@ func Test_Crossplane(t *testing.T) {
 		t.Run(tC.desc, func(t *testing.T) {
 			ctx := newContext(tC.versionResolver)
 			c := &Crossplane{
-				Config: tC.config,
-				Values: tC.configValues,
+				Config:               tC.config,
+				Values:               tC.configValues,
+				ImagePullSecretNames: tC.imagePullSecretNames,
 			}
 			for _, vfn := range tC.validationFuncs {
 				vfn(t, ctx, c)
