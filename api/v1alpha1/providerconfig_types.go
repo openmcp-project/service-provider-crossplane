@@ -38,13 +38,9 @@ type AvailableCrossplaneProvider struct {
 
 // ChartSpec identifies a Helm chart.
 type ChartSpec struct {
-	// Repository is the URL to a Helm repository.
+	// URL is a reference to an OCI artifact repository hosted on a remote container registry.
 	// +kubebuilder:validation:Required
-	Repository string `json:"repository"`
-
-	// Name of the Helm chart.
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+	URL string `json:"url"`
 
 	// AvailableVersions of the Helm chart.
 	// +kubebuilder:validation:Required

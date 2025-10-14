@@ -78,16 +78,13 @@ spec:
                     items:
                       type: string
                     type: array
-                  name:
-                    description: Name of the Helm chart.
-                    type: string
-                  repository:
-                    description: Repository is the URL to a Helm repository.
+                  url:
+                    description: URL is a reference to an OCI artifact repository
+                      hosted on a remote container registry.
                     type: string
                 required:
                 - availableVersions
-                - name
-                - repository
+                - url
                 type: object
               imageMapping:
                 additionalProperties:
