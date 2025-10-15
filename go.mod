@@ -15,7 +15,7 @@ require (
 	github.com/openmcp-project/openmcp-operator/api v0.15.1
 	github.com/openmcp-project/openmcp-operator/lib v0.15.1
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/text v0.29.0
+	golang.org/x/text v0.30.0
 	gotest.tools/v3 v3.5.2
 	k8s.io/api v0.34.1
 	k8s.io/apiextensions-apiserver v0.34.1
