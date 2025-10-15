@@ -60,6 +60,10 @@ type ProviderConfigSpec struct {
 	// AvailableProviders holds the list of providers that can be configured with the Service Provider Crossplane.
 	// +kubebuilder:validation:Required
 	AvailableProviders []AvailableCrossplaneProvider `json:"availableProviders"`
+
+	// Image pull secrets for Crossplane pods
+	// +kubebuilder:validation:Optional
+	ImagePullSecrets []commonapi.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 }
 
 // ProviderConfigStatus defines the observed state of ProviderConfig.

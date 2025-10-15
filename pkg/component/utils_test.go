@@ -4,6 +4,7 @@ package component
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -17,7 +18,6 @@ import (
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/fluxcd"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/object"
-	"github.com/openmcp-project/control-plane-operator/pkg/utils"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 )
 
@@ -30,7 +30,10 @@ var (
 		},
 	}
 
-	errFake = errors.New("some error")
+	errFake          = errors.New("some error")
+	errNoPath        = errors.New("at least one path element needs to be specified")
+	errMapNil        = errors.New("map is nil")
+	errValueNotFound = errors.New("value not found")
 )
 
 func fakeVersionResolver(shouldFail bool) v1beta1.VersionResolverFn {
@@ -68,6 +71,12 @@ func isAllowed(expected bool) validationFunc {
 	return func(t *testing.T, ctx context.Context, c juggler.Component) {
 		actual, _ := c.IsInstallable(ctx)
 		assert.Equal(t, expected, actual, "IsInstallable does not match")
+	}
+}
+
+func hasNoHooks() validationFunc {
+	return func(t *testing.T, ctx context.Context, c juggler.Component) {
+		assert.Equal(t, juggler.ComponentHooks{}, c.Hooks())
 	}
 }
 
@@ -163,7 +172,7 @@ func hasKubeconfigRef() helmReleaseValidationFunc {
 func hasHelmValue(expected any, path ...string) helmReleaseValidationFunc {
 	return func(t *testing.T, ctx context.Context, h *fluxcd.HelmReleaseManifesto) {
 		if assert.NotNil(t, h.Manifest.Spec.Values, "values are nil") {
-			actual, err := utils.GetNestedValue(h.Manifest.GetValues(), path...)
+			actual, err := getNestedValue(h.Manifest.GetValues(), path...)
 			assert.NoError(t, err)
 			assert.EqualValues(t, expected, actual)
 		}
@@ -251,4 +260,34 @@ func canBuildAndReconcile(expectedErr error) objectValidationFunc {
 		err = c.ReconcileObject(ctx, obj)
 		assert.Equal(t, expectedErr, err)
 	}
+}
+
+// getNestedValue extracts nested values from maps or lists
+func getNestedValue(m map[string]any, path ...string) (any, error) {
+	if m == nil {
+		return nil, errMapNil
+	}
+	if len(path) == 0 {
+		return nil, errNoPath
+	}
+	current := any(m)
+	for _, p := range path {
+		switch c := current.(type) {
+		case map[string]any:
+			if val, ok := c[p]; ok {
+				current = val
+			} else {
+				return nil, errValueNotFound
+			}
+		case []any:
+			index, err := strconv.Atoi(p)
+			if err != nil || index < 0 || index >= len(c) {
+				return nil, errValueNotFound
+			}
+			current = c[index]
+		default:
+			return nil, errValueNotFound
+		}
+	}
+	return current, nil
 }

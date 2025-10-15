@@ -14,3 +14,5 @@ spec:
       package: xpkg.upbound.io/upbound/provider-kubernetes
       versions:
         - v0.16.0
+  imagePullSecrets:
+    - name: registry-secret

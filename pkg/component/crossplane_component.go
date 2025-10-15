@@ -39,9 +39,10 @@ var _ components.TargetComponent = &Crossplane{}
 
 // Crossplane represents the Crossplane component configuration.
 type Crossplane struct {
-	Config    *v1alpha1.CrossplaneSpec
-	ChartSpec *v1beta1.ChartSpec
-	Values    *apiextensionsv1.JSON `json:"values,omitempty"`
+	Config               *v1alpha1.CrossplaneSpec
+	ChartSpec            *v1beta1.ChartSpec
+	Values               *apiextensionsv1.JSON `json:"values,omitempty"`
+	ImagePullSecretNames []string
 }
 
 // GetNamespace implements TargetComponent.
@@ -160,6 +161,9 @@ func (c *Crossplane) applyDefaultValues() error {
 			return err
 		}
 	}
+
+	// Add imagePullSecrets if provided in ProviderConfig spec
+	values["imagePullSecrets"] = c.ImagePullSecretNames
 
 	// Write updated values
 	encoded, err := json.Marshal(values)
