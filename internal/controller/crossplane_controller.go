@@ -134,7 +134,7 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return requeueEntry.Error(err)
 	}
 
-	return r.reconcileCrossplaneInstance(ctx, crossplane, mcpCluster.Client(), pc)
+	return r.reconcileCrossplaneInstance(ctx, mcpCluster.Client(), crossplane, pc)
 }
 
 func (r *CrossplaneReconciler) updateStatus(ctx context.Context, crossplane *v1alpha1.Crossplane, newConditions *[]metav1.Condition) {
@@ -212,16 +212,16 @@ func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl
 	return ctx, nil
 }
 
-func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, crossplane *v1alpha1.Crossplane, mcpClient client.Client, pc *v1alpha1.ProviderConfig) (ctrl.Result, error) {
+func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	requeueEntry := smartrequeue.FromContext(ctx)
 
 	// Handle deletion
-	if !crossplane.DeletionTimestamp.IsZero() {
-		return r.deleteCrossplaneInstance(ctx, crossplane, mcpClient, pc)
+	if !xp.DeletionTimestamp.IsZero() {
+		return r.deleteCrossplaneInstance(ctx, mcpClient, xp, pc)
 	}
 
-	conditions, err := r.createOrUpdateCrossplaneInstance(ctx, crossplane, mcpClient, pc)
+	conditions, err := r.createOrUpdateCrossplaneInstance(ctx, mcpClient, xp, pc)
 	if err != nil {
 		log.Error(err, "failed to create or update Crossplane instance")
 		return requeueEntry.Error(err)
@@ -233,13 +233,13 @@ func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, 
 		condApi.SetStatusCondition(&newConditions, c)
 	}
 
-	r.updateStatus(ctx, crossplane, &newConditions)
+	r.updateStatus(ctx, xp, &newConditions)
 
 	// Successfully reconciled - reset the requeue backoff
 	return requeueEntry.Reset()
 }
 
-func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client, pc *v1alpha1.ProviderConfig) (ctrl.Result, error) {
+func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) (ctrl.Result, error) {
 	requeueEntry := smartrequeue.FromContext(ctx)
 
 	if !r.hasFinalizer(xp) {
@@ -249,7 +249,7 @@ func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, xp 
 
 	log := log.FromContext(ctx)
 
-	conditions, err := r.deleteControlPlaneComponents(ctx, xp, mcpClient, pc)
+	conditions, err := r.deleteControlPlaneComponents(ctx, mcpClient, xp, pc)
 
 	// Update status with current conditions
 	newConditions := []metav1.Condition{}
@@ -274,7 +274,7 @@ func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, xp 
 	return requeueEntry.Never()
 }
 
-func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
+func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
 	// disable all components
 	xpCopy := xp.DeepCopy()
 	xpCopy.Spec = v1alpha1.CrossplaneSpec{}
@@ -282,7 +282,7 @@ func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context,
 	pcCopy := pc.DeepCopy()
 	pcCopy.Spec = v1alpha1.ProviderConfigSpec{}
 
-	j, err := r.newJuggler(ctx, xpCopy, mcpClient, pcCopy)
+	j, err := r.newJuggler(ctx, mcpClient, xpCopy, pcCopy)
 	if err != nil {
 		return nil, err
 	}
@@ -312,8 +312,8 @@ func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context,
 	return conditions, nil
 }
 
-func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Context, crossplane *v1alpha1.Crossplane, mcpClient client.Client, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
-	j, err := r.newJuggler(ctx, crossplane, mcpClient, pc)
+func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
+	j, err := r.newJuggler(ctx, mcpClient, xp, pc)
 	if err != nil {
 		return nil, err
 	}
@@ -332,7 +332,7 @@ func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Cont
 	return conditions, nil
 }
 
-func (r *CrossplaneReconciler) newJuggler(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client, pc *v1alpha1.ProviderConfig) (*juggler.Juggler, error) {
+func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) (*juggler.Juggler, error) {
 	logger := log.FromContext(ctx)
 	var comps []juggler.Component
 	jug := juggler.NewJuggler(logger, juggler.NewEventRecorder(r.Recorder, xp))
