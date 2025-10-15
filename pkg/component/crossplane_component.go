@@ -64,18 +64,18 @@ func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAd
 	rfn := rcontext.VersionResolver(ctx)
 	c.applyDefaultChartSpec(rfn)
 
-	repo := &sourcev1.HelmRepository{
+	repo := &sourcev1.OCIRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      strings.ToLower(ComponentNameCrossplane),
 			Namespace: rcontext.TenantNamespace(ctx),
 		},
-		Spec: sourcev1.HelmRepositorySpec{
-			URL:     c.ChartSpec.Repository,
+		Spec: sourcev1.OCIRepositorySpec{
+			URL:     c.ChartSpec.URL,
 			Timeout: &metav1.Duration{Duration: 1 * time.Minute},
 		},
 	}
 
-	adapter := &fluxcd.HelmRepositoryAdapter{Source: repo}
+	adapter := &fluxcd.OCIRepositoryAdapter{Source: repo}
 	adapter.ApplyDefaults()
 	return adapter, nil
 }
@@ -99,7 +99,7 @@ func (c *Crossplane) BuildManifesto(ctx context.Context) (fluxcd.Manifesto, erro
 					Chart:   c.ChartSpec.Name,
 					Version: c.ChartSpec.Version,
 					SourceRef: helmv2.CrossNamespaceObjectReference{
-						Kind: "HelmRepository",
+						Kind: "OCIRepository",
 						Name: strings.ToLower(ComponentNameCrossplane),
 					},
 				},
