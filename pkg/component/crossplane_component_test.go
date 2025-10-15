@@ -57,7 +57,7 @@ func Test_Crossplane(t *testing.T) {
 					hasNamespace(CrossplaneNamespace),
 				),
 				isFluxComponent(
-					returnsHelmRepo(),
+					returnsOCIRepository(),
 					returnsHelmRelease(
 						hasKubeconfigRef(),
 						hasHelmValue(2, "replicas"), // custom value
