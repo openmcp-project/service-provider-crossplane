@@ -5,6 +5,7 @@
 package v1alpha1
 
 import (
+	"github.com/openmcp-project/openmcp-operator/api/common"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -240,6 +241,11 @@ func (in *ProviderConfigSpec) DeepCopyInto(out *ProviderConfigSpec) {
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
+	}
+	if in.ImagePullSecrets != nil {
+		in, out := &in.ImagePullSecrets, &out.ImagePullSecrets
+		*out = make([]common.LocalObjectReference, len(*in))
+		copy(*out, *in)
 	}
 }
 

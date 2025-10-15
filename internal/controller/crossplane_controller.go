@@ -20,11 +20,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
 	"github.com/openmcp-project/controller-utils/pkg/controller/smartrequeue"
+	openmcpconsts "github.com/openmcp-project/openmcp-operator/api/constants"
 	corev1 "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -100,8 +102,14 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	log.Info("Reconciling Crossplane", "name", crossplane.Name, "namespace", crossplane.Namespace)
 
+	// Get ProviderConfig from Platform cluster
+	pc := &v1alpha1.ProviderConfig{}
+	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: "default"}, pc); err != nil {
+		return requeueEntry.Error(err)
+	}
+
 	// Setup reconciliation context
-	ctx, err := r.setupReconciliationContext(ctx, req)
+	ctx, err := r.setupReconciliationContext(ctx, req, pc)
 	if err != nil {
 		return requeueEntry.Error(err)
 	}
@@ -126,7 +134,7 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return requeueEntry.Error(err)
 	}
 
-	return r.reconcileCrossplaneInstance(ctx, crossplane, mcpCluster.Client())
+	return r.reconcileCrossplaneInstance(ctx, mcpCluster.Client(), crossplane, pc)
 }
 
 func (r *CrossplaneReconciler) updateStatus(ctx context.Context, crossplane *v1alpha1.Crossplane, newConditions *[]metav1.Condition) {
@@ -140,13 +148,7 @@ func (r *CrossplaneReconciler) updateStatus(ctx context.Context, crossplane *v1a
 	}
 }
 
-func (r *CrossplaneReconciler) setupReconciliationContext(ctx context.Context, req ctrl.Request) (context.Context, error) {
-	// Get ProviderConfig from Platform cluster
-	providerConfig := &v1alpha1.ProviderConfig{}
-	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: "default"}, providerConfig); err != nil {
-		return ctx, fmt.Errorf("unable to fetch ProviderConfig 'default': %w", err)
-	}
-
+func (r *CrossplaneReconciler) setupReconciliationContext(ctx context.Context, req ctrl.Request, providerConfig *v1alpha1.ProviderConfig) (context.Context, error) {
 	// Handle ProviderConfig as ReleaseChannel
 	resolverFn := r.GetResolverFunc(providerConfig)
 	ctx = rcontext.WithVersionResolver(ctx, resolverFn)
@@ -210,16 +212,16 @@ func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl
 	return ctx, nil
 }
 
-func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, crossplane *v1alpha1.Crossplane, mcpClient client.Client) (ctrl.Result, error) {
+func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 	requeueEntry := smartrequeue.FromContext(ctx)
 
 	// Handle deletion
-	if !crossplane.DeletionTimestamp.IsZero() {
-		return r.deleteCrossplaneInstance(ctx, crossplane, mcpClient)
+	if !xp.DeletionTimestamp.IsZero() {
+		return r.deleteCrossplaneInstance(ctx, mcpClient, xp, pc)
 	}
 
-	conditions, err := r.createOrUpdateCrossplaneInstance(ctx, crossplane, mcpClient)
+	conditions, err := r.createOrUpdateCrossplaneInstance(ctx, mcpClient, xp, pc)
 	if err != nil {
 		log.Error(err, "failed to create or update Crossplane instance")
 		return requeueEntry.Error(err)
@@ -231,13 +233,13 @@ func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, 
 		condApi.SetStatusCondition(&newConditions, c)
 	}
 
-	r.updateStatus(ctx, crossplane, &newConditions)
+	r.updateStatus(ctx, xp, &newConditions)
 
 	// Successfully reconciled - reset the requeue backoff
 	return requeueEntry.Reset()
 }
 
-func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client) (ctrl.Result, error) {
+func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) (ctrl.Result, error) {
 	requeueEntry := smartrequeue.FromContext(ctx)
 
 	if !r.hasFinalizer(xp) {
@@ -247,7 +249,7 @@ func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, xp 
 
 	log := log.FromContext(ctx)
 
-	conditions, err := r.deleteControlPlaneComponents(ctx, xp, mcpClient)
+	conditions, err := r.deleteControlPlaneComponents(ctx, mcpClient, xp, pc)
 
 	// Update status with current conditions
 	newConditions := []metav1.Condition{}
@@ -272,12 +274,15 @@ func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, xp 
 	return requeueEntry.Never()
 }
 
-func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client) ([]metav1.Condition, error) {
+func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
 	// disable all components
 	xpCopy := xp.DeepCopy()
 	xpCopy.Spec = v1alpha1.CrossplaneSpec{}
+	// disable imagePullSecrets from ProviderConfig
+	pcCopy := pc.DeepCopy()
+	pcCopy.Spec = v1alpha1.ProviderConfigSpec{}
 
-	j, err := r.newJuggler(ctx, xpCopy, mcpClient)
+	j, err := r.newJuggler(ctx, mcpClient, xpCopy, pcCopy)
 	if err != nil {
 		return nil, err
 	}
@@ -307,8 +312,8 @@ func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context,
 	return conditions, nil
 }
 
-func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Context, crossplane *v1alpha1.Crossplane, mcpClient client.Client) ([]metav1.Condition, error) {
-	j, err := r.newJuggler(ctx, crossplane, mcpClient)
+func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
+	j, err := r.newJuggler(ctx, mcpClient, xp, pc)
 	if err != nil {
 		return nil, err
 	}
@@ -327,15 +332,45 @@ func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Cont
 	return conditions, nil
 }
 
-func (r *CrossplaneReconciler) newJuggler(ctx context.Context, xp *v1alpha1.Crossplane, mcpClient client.Client) (*juggler.Juggler, error) {
+func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) (*juggler.Juggler, error) {
 	logger := log.FromContext(ctx)
-	comps := []juggler.Component{}
+	var comps []juggler.Component
 	jug := juggler.NewJuggler(logger, juggler.NewEventRecorder(r.Recorder, xp))
 
 	xpComp := &component.Crossplane{
 		Config: &xp.Spec,
 	}
 	comps = append(comps, xpComp)
+
+	// Add image pull secrets as components to be managed by the juggler.
+	// Target secret namespace is crossplane-system
+	if pc.Spec.ImagePullSecrets != nil {
+		podNs := os.Getenv(openmcpconsts.EnvVariablePodNamespace)
+		if podNs == "" {
+			return nil, errors.New("environment variable POD_NAMESPACE not set")
+		}
+		for _, ps := range pc.Spec.ImagePullSecrets {
+			if ps.Name == "" {
+				continue
+			}
+			sec := &component.Secret{
+				SourceClient: r.PlatformCluster.Client(),
+				Source: types.NamespacedName{
+					Name:      ps.Name,
+					Namespace: podNs,
+				},
+				Target: types.NamespacedName{
+					Name:      ps.Name,
+					Namespace: component.CrossplaneNamespace,
+				},
+				Enabled: xpComp.IsEnabled(),
+			}
+			comps = append(comps, sec)
+			// Set image pull secret reference in Crossplane component so it can be added to the PodSpec
+			xpComp.ImagePullSecretNames = append(xpComp.ImagePullSecretNames, sec.Target.Name)
+		}
+	}
+
 	if xp.Spec.Providers != nil {
 		for _, provider := range xp.Spec.Providers {
 			xpp := &component.CrossplaneProvider{
@@ -366,6 +401,7 @@ func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, log
 
 	or := object.NewReconciler(logger, mcpClient, sputils.LabelComponentName)
 	or.RegisterType(
+		&component.Secret{},
 		&component.CrossplaneProvider{},
 	)
 	juggler.RegisterReconciler(or)
