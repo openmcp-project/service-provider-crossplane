@@ -427,9 +427,8 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 			for _, availableVersion := range providerConfig.Spec.Chart.AvailableVersions {
 				if availableVersion == version {
 					return v1beta1.ComponentVersion{
-						HelmRepo:  providerConfig.Spec.Chart.Repository,
-						HelmChart: providerConfig.Spec.Chart.Name,
-						Version:   version,
+						OCIURL: providerConfig.Spec.Chart.URL,
+						Version:  version,
 					}, nil
 				}
 			}
