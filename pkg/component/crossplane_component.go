@@ -162,15 +162,8 @@ func (c *Crossplane) applyDefaultValues() error {
 		}
 	}
 
-	// If specified, add image pull secrets to values.
-	// These should match the secrets copied by the Crossplane controller
-	if len(c.ImagePullSecretNames) > 0 {
-		imagePullSecrets := make([]map[string]string, 0, len(c.ImagePullSecretNames))
-		for _, secretName := range c.ImagePullSecretNames {
-			imagePullSecrets = append(imagePullSecrets, map[string]string{"name": secretName})
-		}
-		values["imagePullSecrets"] = imagePullSecrets
-	}
+	// Add imagePullSecrets if provided in ProviderConfig spec
+	values["imagePullSecrets"] = c.ImagePullSecretNames
 
 	// Write updated values
 	encoded, err := json.Marshal(values)

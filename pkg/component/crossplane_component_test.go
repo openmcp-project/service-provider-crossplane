@@ -61,8 +61,8 @@ func Test_Crossplane(t *testing.T) {
 					returnsHelmRelease(
 						hasKubeconfigRef(),
 						hasHelmValue(2, "replicas"), // custom value
-						hasHelmValue("secret-1", "imagePullSecrets", "0", "name"),
-						hasHelmValue("secret-2", "imagePullSecrets", "1", "name"),
+						hasHelmValue("secret-1", "imagePullSecrets", "0"),
+						hasHelmValue("secret-2", "imagePullSecrets", "1"),
 					),
 				),
 			},
