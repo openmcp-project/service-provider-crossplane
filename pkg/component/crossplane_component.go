@@ -70,7 +70,10 @@ func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAd
 			Namespace: rcontext.TenantNamespace(ctx),
 		},
 		Spec: sourcev1.OCIRepositorySpec{
-			URL:     c.ChartSpec.URL,
+			URL: c.ChartSpec.URL,
+			Reference: &sourcev1.OCIRepositoryRef{
+				Tag: c.ChartSpec.Version,
+			},
 			Timeout: &metav1.Duration{Duration: 1 * time.Minute},
 		},
 	}
@@ -94,15 +97,9 @@ func (c *Crossplane) BuildManifesto(ctx context.Context) (fluxcd.Manifesto, erro
 			Namespace: rcontext.TenantNamespace(ctx),
 		},
 		Spec: helmv2.HelmReleaseSpec{
-			Chart: &helmv2.HelmChartTemplate{
-				Spec: helmv2.HelmChartTemplateSpec{
-					Chart:   c.ChartSpec.Name,
-					Version: c.ChartSpec.Version,
-					SourceRef: helmv2.CrossNamespaceObjectReference{
-						Kind: "OCIRepository",
-						Name: strings.ToLower(ComponentNameCrossplane),
-					},
-				},
+			ChartRef: &helmv2.CrossNamespaceSourceReference{
+				Kind: "OCIRepository",
+				Name: strings.ToLower(ComponentNameCrossplane),
 			},
 			ReleaseName:      CrossplaneRelease,
 			TargetNamespace:  CrossplaneNamespace,
@@ -142,9 +139,8 @@ func (c *Crossplane) applyDefaultChartSpec(rfn v1beta1.VersionResolverFn) {
 
 	if c.ChartSpec == nil {
 		c.ChartSpec = &v1beta1.ChartSpec{
-			Repository: comp.HelmRepo,
-			Name:       comp.HelmChart,
-			Version:    comp.Version,
+			URL:     comp.OCIURL,
+			Version: comp.Version,
 		}
 	}
 }
