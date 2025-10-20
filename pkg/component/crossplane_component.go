@@ -7,6 +7,7 @@ import (
 	"time"
 
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
+	"github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,6 +76,9 @@ func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAd
 				Tag: c.ChartSpec.Version,
 			},
 			Timeout: &metav1.Duration{Duration: 1 * time.Minute},
+			SecretRef: &meta.LocalObjectReference{
+				Name: c.ImagePullSecretNames[0], // always use the first secret for OCI auth
+			},
 		},
 	}
 
@@ -160,6 +164,11 @@ func (c *Crossplane) applyDefaultValues() error {
 
 	// Add imagePullSecrets if provided in ProviderConfig spec
 	values["imagePullSecrets"] = c.ImagePullSecretNames
+
+	// Pull Deployment image from specified chart URL provided in ProviderConfig spec
+	values["image"] = map[string]any{
+		"repository": c.ChartSpec.URL,
+	}
 
 	// Write updated values
 	encoded, err := json.Marshal(values)
