@@ -414,7 +414,8 @@ func (r *CrossplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithMCPScheme(scheme.MCP).
 		WithRetryInterval(10 * time.Second).
 		WithMCPPermissions(getMCPPermissions()).
-		WithMCPRoleRefs(getMCPRoleRefs())
+		WithMCPRoleRefs(getMCPRoleRefs()).
+		SkipWorkloadCluster()
 
 	// Initialize smart requeue store with sensible defaults:
 	// - Min interval: 5 seconds (quick retry for transient issues)
