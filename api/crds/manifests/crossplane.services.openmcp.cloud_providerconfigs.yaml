@@ -74,8 +74,9 @@ spec:
                       - versions
                       type: object
                     type: array
-                  imagePullSecrets:
-                    description: Image pull secrets for Crossplane pods
+                  imagePullSecretRefs:
+                    description: Image pull secrets for pulling Crossplane provider
+                      images from private OCI registries.
                     items:
                       description: LocalObjectReference is a reference to an object
                         in the same namespace as the resource referencing it.

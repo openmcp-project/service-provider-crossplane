@@ -41,9 +41,9 @@ type CrossplaneProviders struct {
 	// +kubebuilder:validation:Required
 	AvailableProviders []AvailableCrossplaneProvider `json:"availableProviders"`
 
-	// Image pull secrets for Crossplane pods
+	// Image pull secrets for pulling Crossplane provider images from private OCI registries.
 	// +kubebuilder:validation:Optional
-	ImagePullSecrets []commonapi.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+	ImagePullSecrets []commonapi.LocalObjectReference `json:"imagePullSecretRefs,omitempty"`
 }
 
 // ChartSpec defines the location and access of a Helm chart.
