@@ -45,74 +45,122 @@ spec:
           spec:
             description: spec defines the desired state of ProviderConfig
             properties:
-              availableProviders:
-                description: AvailableProviders holds the list of providers that can
-                  be configured with the Service Provider Crossplane.
-                items:
-                  description: AvailableCrossplaneProvider represents configuration
-                    for Crossplane providers in a ProviderConfig of the Service Provider
-                    Crossplane.
-                  properties:
-                    name:
-                      description: Name of the provider.
-                      type: string
-                    package:
-                      description: Package is the package name of the provider.
-                      type: string
-                    versions:
-                      description: Version of the provider to install.
-                      items:
-                        type: string
-                      type: array
-                  required:
-                  - name
-                  - package
-                  - versions
-                  type: object
-                type: array
-              chart:
-                description: Optional custom Helm chart configuration.
+              providers:
+                description: Providers holds the configuration for Crossplane providers
+                  that can be installed via the Service Provider Crossplane.
                 properties:
-                  availableVersions:
-                    description: AvailableVersions of the Helm chart.
+                  availableProviders:
+                    description: AvailableProviders holds the list of providers that
+                      can be configured with the Service Provider Crossplane.
                     items:
-                      type: string
+                      description: AvailableCrossplaneProvider represents configuration
+                        for Crossplane providers in a ProviderConfig of the Service
+                        Provider Crossplane.
+                      properties:
+                        name:
+                          description: Name of the provider.
+                          type: string
+                        package:
+                          description: Package is the package name of the provider.
+                          type: string
+                        versions:
+                          description: Version of the provider to install.
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - name
+                      - package
+                      - versions
+                      type: object
                     type: array
-                  url:
-                    description: URL is a reference to an OCI artifact repository
-                      hosted on a remote container registry.
-                    type: string
+                  imagePullSecrets:
+                    description: Image pull secrets for Crossplane pods
+                    items:
+                      description: LocalObjectReference is a reference to an object
+                        in the same namespace as the resource referencing it.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    type: array
                 required:
-                - availableVersions
-                - url
+                - availableProviders
                 type: object
-              imageMapping:
-                additionalProperties:
-                  type: string
-                description: ImageMapping holds the information about exchangable
-                  image locations in the Helm chart.
-                type: object
-              imagePullSecrets:
-                description: Image pull secrets for Crossplane pods
+              versions:
                 items:
-                  description: LocalObjectReference is a reference to an object in
-                    the same namespace as the resource referencing it.
                   properties:
-                    name:
-                      default: ""
-                      description: |-
-                        Name of the referent.
-                        This field is effectively required, but due to backwards compatibility is
-                        allowed to be empty. Instances of this type with an empty value here are
-                        almost certainly wrong.
-                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    chart:
+                      description: Chart holds the Helm chart information for this
+                        Crossplane version.
+                      properties:
+                        secretRef:
+                          description: SecretRef references a secret containing credentials
+                            to access the OCI artifact repository.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        url:
+                          description: URL is a reference to an OCI artifact repository
+                            hosted on a remote container registry where the Helm chart
+                            is stored.
+                          type: string
+                      required:
+                      - url
+                      type: object
+                    image:
+                      description: Image holds the Crossplane controller image information
+                        for this Crossplane version.
+                      properties:
+                        secretRef:
+                          description: SecretRef references a secret containing credentials
+                            to access the container image repository.
+                          properties:
+                            name:
+                              default: ""
+                              description: |-
+                                Name of the referent.
+                                This field is effectively required, but due to backwards compatibility is
+                                allowed to be empty. Instances of this type with an empty value here are
+                                almost certainly wrong.
+                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        url:
+                          description: URL is a reference to the container image location.
+                          type: string
+                      required:
+                      - url
+                      type: object
+                    version:
+                      description: Version of Crossplane.
                       type: string
+                  required:
+                  - chart
+                  - image
+                  - version
                   type: object
-                  x-kubernetes-map-type: atomic
                 type: array
             required:
-            - availableProviders
-            - chart
+            - versions
             type: object
           status:
             description: status defines the observed state of ProviderConfig
