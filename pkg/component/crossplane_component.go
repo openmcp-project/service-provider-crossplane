@@ -43,6 +43,7 @@ type Crossplane struct {
 	Config               *v1alpha1.CrossplaneSpec
 	ChartSpec            *v1beta1.ChartSpec
 	Values               *apiextensionsv1.JSON `json:"values,omitempty"`
+	ChartPullSecretName  string
 	ImagePullSecretNames []string
 }
 
@@ -77,7 +78,7 @@ func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAd
 			},
 			Timeout: &metav1.Duration{Duration: 1 * time.Minute},
 			SecretRef: &meta.LocalObjectReference{
-				Name: c.ImagePullSecretNames[0], // always use the first secret for OCI auth
+				Name: c.ChartPullSecretName,
 			},
 		},
 	}

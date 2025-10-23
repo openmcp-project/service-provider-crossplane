@@ -29,8 +29,9 @@ var _ components.TargetComponent = &CrossplaneProvider{}
 
 // CrossplaneProvider represents a Crossplane provider configuration for a Crossplane instance.
 type CrossplaneProvider struct {
-	Config  *v1alpha1.CrossplaneProviderConfig
-	Enabled bool
+	Config      *v1alpha1.CrossplaneProviderConfig
+	Enabled     bool
+	PullSecrets []corev1.LocalObjectReference
 }
 
 // BuildObjectToReconcile implements object.ObjectComponent.
@@ -53,6 +54,7 @@ func (c *CrossplaneProvider) ReconcileObject(ctx context.Context, obj client.Obj
 	utils.SetManagedBy(objProvider)
 	objProvider.Spec.Package = formatPackage(comp.DockerRef, comp.Version)
 	objProvider.Spec.PackagePullPolicy = ptr.To(corev1.PullIfNotPresent)
+	objProvider.Spec.PackagePullSecrets = c.PullSecrets
 	return nil
 }
 
