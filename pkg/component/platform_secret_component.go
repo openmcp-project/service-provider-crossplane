@@ -15,7 +15,7 @@ var _ object.ObjectComponent = &PlatformSecret{}
 var _ object.OrphanedObjectsDetector = &PlatformSecret{}
 var _ juggler.StatusVisibility = &PlatformSecret{}
 
-// Secret represents a Kubernetes Secret that is copied from a source namespace to the Crossplane namespace.
+// PlatformSecret represents a Kubernetes Secret that is copied from a source namespace in the Platform cluster to the ManagedControlPlane tenant namespace in the Plaform cluster.
 type PlatformSecret struct {
 	SourceClient   client.Client
 	Source, Target types.NamespacedName

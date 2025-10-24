@@ -332,6 +332,7 @@ func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Cont
 	return conditions, nil
 }
 
+//nolint:gocyclo,prealloc
 func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) (*juggler.Juggler, error) {
 	logger := log.FromContext(ctx)
 	var comps []juggler.Component
