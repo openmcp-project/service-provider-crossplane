@@ -36,6 +36,7 @@ type AvailableCrossplaneProvider struct {
 	Package string `json:"package"`
 }
 
+// CrossplaneProviders represents the configutation of Crossplane providers and and their image pull secrets.
 type CrossplaneProviders struct {
 	// AvailableProviders holds the list of providers that can be configured with the Service Provider Crossplane.
 	// +kubebuilder:validation:Required
@@ -68,6 +69,7 @@ type ImageSpec struct {
 	SecretRef commonapi.LocalObjectReference `json:"secretRef,omitempty"`
 }
 
+// CrossplaneVersion defines a specific version of Crossplane along with its chart and image information.
 type CrossplaneVersion struct {
 	// Version of Crossplane.
 	// +kubebuilder:validation:Required

@@ -98,6 +98,8 @@ spec:
                 type: object
               versions:
                 items:
+                  description: CrossplaneVersion defines a specific version of Crossplane
+                    along with its chart and image information.
                   properties:
                     chart:
                       description: Chart holds the Helm chart information for this
