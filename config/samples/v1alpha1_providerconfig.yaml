@@ -6,20 +6,20 @@ spec:
   versions: # mapping of
     - version: v2.0.2
       chart:
-        url: "ghcr.io/openmcp-project/openmcp/charts/crossplane:v2.0.2"
+        url: "ghcr.io/openmcp-project/openmcp/charts/crossplane:2.0.2"
         secretRef:
           name: ghcr
       image:
-        url: "ghcr.io/openmcp-project/openmcp/images/crossplane:v2.0.2"
+        url: "ghcr.io/openmcp-project/openmcp/images/crossplane:2.0.2"
         secretRef:
           name: xyz
     - version: v1.0.9
       chart:
-        url: "ghcr.io/openmcp-project/openmcp/charts/crossplane:v1.20.0"
+        url: "ghcr.io/openmcp-project/openmcp/charts/crossplane:1.20.0"
         secretRef:
           name: ghcr
       image:
-        url: "ghcr.io/openmcp-project/openmcp/images/crossplane:v1.20.0"
+        url: "ghcr.io/openmcp-project/openmcp/images/crossplane:1.20.0"
         secretRef:
           name: xyz
 
