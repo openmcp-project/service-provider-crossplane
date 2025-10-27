@@ -1,6 +1,25 @@
+//nolint:revive
 package utils
 
 import "strings"
+
+// OCIPrefix is the standard prefix for OCI URLs.
+const OCIPrefix = "oci://"
+
+// AddOCIPrefix adds the "oci://" prefix to the given URL if it doesn't already have it.
+// It returns the URL unchanged if it already starts with "oci://" (case-sensitive).
+// If the input is empty, it returns an empty string.
+func AddOCIPrefix(ociURL string) string {
+	// Handle empty string
+	if ociURL == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(ociURL, OCIPrefix) {
+		return ociURL
+	}
+	return OCIPrefix + ociURL
+}
 
 // SplitURLAndTag splits an OCI URL into its base URL and tag.
 // Example 1: "registry.example.com/repo/image:v1" -> "registry.example.com/repo/image", "v1"
