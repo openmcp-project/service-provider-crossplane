@@ -52,7 +52,7 @@ func (c *CrossplaneProvider) ReconcileObject(ctx context.Context, obj client.Obj
 
 	objProvider := obj.(*crossplanev1.Provider)
 	utils.SetManagedBy(objProvider)
-	objProvider.Spec.Package = comp.DockerRef
+	objProvider.Spec.Package = comp.DockerRef // format: <repository>:<tag>
 	objProvider.Spec.PackagePullPolicy = ptr.To(corev1.PullIfNotPresent)
 	objProvider.Spec.PackagePullSecrets = c.PullSecrets
 	return nil
