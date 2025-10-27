@@ -344,9 +344,11 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.
 	}
 
 	xpContainerImagePullSecrets := discoverCrossplaneImagePullSecrets(pc.Spec.CrossplaneVersions)
+	xpHelmChartPullSecrets := discoverCrossplaneHelmChartPullSecrets(pc.Spec.CrossplaneVersions)
 
 	xpComp := &component.Crossplane{
 		Config:               &xp.Spec,
+		ChartPullSecretName:  extractSecretNames(xpHelmChartPullSecrets)[0],
 		ImagePullSecretNames: extractSecretNames(xpContainerImagePullSecrets),
 	}
 	comps = append(comps, xpComp)
@@ -378,7 +380,6 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.
 
 	// Add Helm chart pull secrets as components to be managed by the juggler
 	// These are needed for pulling Crossplane Helm charts from private OCI registries
-	xpHelmChartPullSecrets := discoverCrossplaneHelmChartPullSecrets(pc.Spec.CrossplaneVersions)
 	for _, ps := range xpHelmChartPullSecrets {
 		if ps.Name == "" {
 			continue
@@ -505,6 +506,7 @@ func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, log
 		&component.Secret{},
 		&component.CrossplaneProvider{},
 	)
+	juggler.RegisterReconciler(or)
 
 	por := object.NewReconciler(logger, r.PlatformCluster.Client(), sputils.LabelComponentName)
 	por.RegisterType(
