@@ -570,8 +570,8 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 			for _, availableVersion := range providerConfig.Spec.CrossplaneVersions {
 				if availableVersion.Version == version {
 					return v1beta1.ComponentVersion{
-						OCIURL:    availableVersion.Chart.URL,
-						DockerRef: availableVersion.Image.URL,
+						OCIURL:    availableVersion.Chart.URL, // format: <image-location>:<version>
+						DockerRef: availableVersion.Image.URL, // format: <image-location>:<version>
 						Version:   version,
 					}, nil
 				}
@@ -586,7 +586,7 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 				for _, availableVersion := range provider.Versions {
 					if availableVersion == version {
 						return v1beta1.ComponentVersion{
-							DockerRef: provider.Package,
+							DockerRef: provider.Package + ":" + version, // format: <image-location>:<version>
 							Version:   version,
 						}, nil
 					}

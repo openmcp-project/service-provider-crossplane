@@ -18,6 +18,7 @@ import (
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/fluxcd"
 
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
+	"github.com/openmcp-project/service-provider-crossplane/pkg/utils"
 
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/hooks"
@@ -41,7 +42,6 @@ var _ components.TargetComponent = &Crossplane{}
 // Crossplane represents the Crossplane component configuration.
 type Crossplane struct {
 	Config               *v1alpha1.CrossplaneSpec
-	ChartSpec            *v1beta1.ChartSpec
 	Values               *apiextensionsv1.JSON `json:"values,omitempty"`
 	ChartPullSecretName  string
 	ImagePullSecretNames []string
@@ -64,7 +64,11 @@ func (c *Crossplane) IsInstallable(ctx context.Context) (bool, error) {
 // BuildSourceRepository implements FluxComponent.
 func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAdapter, error) {
 	rfn := rcontext.VersionResolver(ctx)
-	c.applyDefaultChartSpec(rfn)
+
+	comp, _ := rfn(CrossplaneRelease, c.Config.Version)
+
+	url, tag := utils.SplitURLAndTag(comp.OCIURL)
+	ociURL := utils.AddOCIPrefix(url)
 
 	repo := &sourcev1.OCIRepository{
 		ObjectMeta: metav1.ObjectMeta{
@@ -72,9 +76,9 @@ func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAd
 			Namespace: rcontext.TenantNamespace(ctx),
 		},
 		Spec: sourcev1.OCIRepositorySpec{
-			URL: c.ChartSpec.URL,
+			URL: ociURL,
 			Reference: &sourcev1.OCIRepositoryRef{
-				Tag: c.ChartSpec.Version,
+				Tag: tag,
 			},
 			Timeout: &metav1.Duration{Duration: 1 * time.Minute},
 			SecretRef: &meta.LocalObjectReference{
@@ -92,7 +96,8 @@ func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAd
 //
 //nolint:dupl
 func (c *Crossplane) BuildManifesto(ctx context.Context) (fluxcd.Manifesto, error) {
-	if err := c.applyDefaultValues(); err != nil {
+	rfn := rcontext.VersionResolver(ctx)
+	if err := c.applyDefaultValues(rfn); err != nil {
 		return nil, err
 	}
 
@@ -135,25 +140,12 @@ func (c *Crossplane) IsEnabled() bool {
 	return c.Config != nil && c.Config.Version != ""
 }
 
-func (c *Crossplane) applyDefaultChartSpec(rfn v1beta1.VersionResolverFn) {
-	if c.Config == nil {
-		c.Config = &v1alpha1.CrossplaneSpec{}
-	}
-
-	comp, _ := rfn(CrossplaneRelease, c.Config.Version)
-
-	if c.ChartSpec == nil {
-		c.ChartSpec = &v1beta1.ChartSpec{
-			URL:     comp.OCIURL,
-			Version: comp.Version,
-		}
-	}
-}
-
-func (c *Crossplane) applyDefaultValues() error {
+func (c *Crossplane) applyDefaultValues(rfn v1beta1.VersionResolverFn) error {
 	if c.Config == nil {
 		return nil
 	}
+
+	comp, _ := rfn(CrossplaneRelease, c.Config.Version)
 
 	// Read user-provided values
 	values := map[string]any{}
@@ -166,9 +158,12 @@ func (c *Crossplane) applyDefaultValues() error {
 	// Add imagePullSecrets if provided in ProviderConfig spec
 	values["imagePullSecrets"] = c.ImagePullSecretNames
 
+	url, tag := utils.SplitURLAndTag(comp.DockerRef)
+
 	// Pull Deployment image from specified chart URL provided in ProviderConfig spec
 	values["image"] = map[string]any{
-		"repository": c.ChartSpec.URL,
+		"repository": url,
+		"tag":        tag,
 	}
 
 	// Write updated values
