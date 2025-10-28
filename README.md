@@ -108,6 +108,9 @@ spec:
       version: v0.16.0 # allowed version from ProviderConfig
 ```
 
+## 📚 Documentation
+More documentation for the service-provider-crossplane can be found in the [docs](./docs) folder.
+
 ## 🧑‍💻 Development
 
 ### Building the binary locally
@@ -140,9 +143,6 @@ To generate the CRDs, DeepCopy functions, and other boilerplate code, you can us
 ```bash
 task generate
 ```
-
-## 📚 Documentation
-More documentation for the service-provider-crossplane can be found in the [docs](./docs) folder.
 
 ## ❤️ Support, Feedback, Contributing
 
