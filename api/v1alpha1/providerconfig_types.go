@@ -50,6 +50,7 @@ type CrossplaneProviders struct {
 // ChartSpec defines the location and access of a Helm chart.
 type ChartSpec struct {
 	// URL is a reference to an OCI artifact repository hosted on a remote container registry where the Helm chart is stored.
+	// The URL must NOT start with "oci://".
 	// +kubebuilder:validation:Required
 	URL string `json:"url"`
 

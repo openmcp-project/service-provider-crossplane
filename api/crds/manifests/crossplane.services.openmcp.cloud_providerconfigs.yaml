@@ -121,9 +121,9 @@ spec:
                           type: object
                           x-kubernetes-map-type: atomic
                         url:
-                          description: URL is a reference to an OCI artifact repository
-                            hosted on a remote container registry where the Helm chart
-                            is stored.
+                          description: |-
+                            URL is a reference to an OCI artifact repository hosted on a remote container registry where the Helm chart is stored.
+                            The URL must NOT start with "oci://".
                           type: string
                       required:
                       - url
