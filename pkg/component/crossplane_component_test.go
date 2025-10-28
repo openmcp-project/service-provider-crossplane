@@ -74,6 +74,7 @@ func Test_Crossplane(t *testing.T) {
 			c := &Crossplane{
 				Config:               tC.config,
 				Values:               tC.configValues,
+				ChartPullSecretName:  "chart-pull-secret",
 				ImagePullSecretNames: tC.imagePullSecretNames,
 			}
 			for _, vfn := range tC.validationFuncs {
