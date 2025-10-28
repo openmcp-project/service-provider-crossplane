@@ -1,6 +1,6 @@
 # How does the Service Provider Crossplane work?
 
-The Service Provider Crossplane is responsible for managing Crossplane instances and Crossplane providers within a `ManagedControlPlane`. It achieves this by reconciling `Crossplane` resources, which define the desired state of Crossplane installations.
+The Service Provider Crossplane is responsible for managing Crossplane instances and Crossplane providers within a `ManagedControlPlane`. It achieves this by reconciling its own `Crossplane` custom resources on the Onboarding API, which define the desired state of Crossplane installations.
 
 The service-provider-crossplane has three main tasks:
 1. Deploy Crossplane (via Helm Chart) into the `ManagedControlPlane` cluster.
