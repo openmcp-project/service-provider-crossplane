@@ -16,6 +16,7 @@ import (
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/components"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/fluxcd"
+	"github.com/openmcp-project/controller-utils/pkg/image"
 
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 	"github.com/openmcp-project/service-provider-crossplane/pkg/utils"
@@ -67,7 +68,10 @@ func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAd
 
 	comp, _ := rfn(CrossplaneRelease, c.Config.Version)
 
-	url, tag := utils.SplitURLAndTag(comp.OCIURL)
+	url, tag, _, err := image.ParseImage(comp.OCIURL)
+	if err != nil {
+		return nil, err
+	}
 	ociURL := utils.AddOCIPrefix(url)
 
 	repo := &sourcev1.OCIRepository{
@@ -158,7 +162,10 @@ func (c *Crossplane) applyDefaultValues(rfn v1beta1.VersionResolverFn) error {
 	// Add imagePullSecrets if provided in ProviderConfig spec
 	values["imagePullSecrets"] = c.ImagePullSecretNames
 
-	url, tag := utils.SplitURLAndTag(comp.DockerRef)
+	url, tag, _, err := image.ParseImage(comp.DockerRef)
+	if err != nil {
+		return err
+	}
 
 	// Pull Deployment image from specified chart URL provided in ProviderConfig spec
 	values["image"] = map[string]any{
