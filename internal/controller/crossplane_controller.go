@@ -332,56 +332,96 @@ func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Cont
 	return conditions, nil
 }
 
+//nolint:gocyclo,prealloc
 func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) (*juggler.Juggler, error) {
 	logger := log.FromContext(ctx)
 	var comps []juggler.Component
 	jug := juggler.NewJuggler(logger, juggler.NewEventRecorder(r.Recorder, xp))
 
+	// Validate that we have Crossplane versions configured
+	if len(pc.Spec.CrossplaneVersions) == 0 {
+		return nil, errors.New("no Crossplane versions configured in ProviderConfig")
+	}
+
+	xpContainerImagePullSecrets := discoverCrossplaneImagePullSecrets(pc.Spec.CrossplaneVersions)
+	xpHelmChartPullSecrets := discoverCrossplaneHelmChartPullSecrets(pc.Spec.CrossplaneVersions)
+
 	xpComp := &component.Crossplane{
-		Config: &xp.Spec,
+		Config:               &xp.Spec,
+		ChartPullSecretName:  extractSecretNames(xpHelmChartPullSecrets)[0],
+		ImagePullSecretNames: extractSecretNames(xpContainerImagePullSecrets),
 	}
 	comps = append(comps, xpComp)
 
 	// Add image pull secrets as components to be managed by the juggler.
 	// Target secret namespace is crossplane-system
-	if pc.Spec.ImagePullSecrets != nil {
-		podNs := os.Getenv(openmcpconsts.EnvVariablePodNamespace)
-		if podNs == "" {
-			return nil, errors.New("environment variable POD_NAMESPACE not set")
+	podNs := os.Getenv(openmcpconsts.EnvVariablePodNamespace)
+	if podNs == "" {
+		return nil, fmt.Errorf("environment variable %s not set - cannot determine source namespace for secrets", openmcpconsts.EnvVariablePodNamespace)
+	}
+	for _, ps := range xpContainerImagePullSecrets {
+		if ps.Name == "" {
+			continue
 		}
-		for _, ps := range pc.Spec.ImagePullSecrets {
-			if ps.Name == "" {
-				continue
-			}
-			sec := &component.Secret{
-				SourceClient: r.PlatformCluster.Client(),
-				Source: types.NamespacedName{
-					Name:      ps.Name,
-					Namespace: podNs,
-				},
-				Target: types.NamespacedName{
-					Name:      ps.Name,
-					Namespace: component.CrossplaneNamespace,
-				},
-				Enabled: xpComp.IsEnabled(),
-			}
-			comps = append(comps, sec)
-			// Set image pull secret reference in Crossplane component so it can be added to the PodSpec
-			xpComp.ImagePullSecretNames = append(xpComp.ImagePullSecretNames, sec.Target.Name)
+		sec := &component.Secret{
+			SourceClient: r.PlatformCluster.Client(),
+			Source: types.NamespacedName{
+				Name:      ps.Name,
+				Namespace: podNs,
+			},
+			Target: types.NamespacedName{
+				Name:      ps.Name,
+				Namespace: component.CrossplaneNamespace,
+			},
+			Enabled: xpComp.IsEnabled(),
 		}
+		comps = append(comps, sec)
+	}
+
+	// Add Helm chart pull secrets as components to be managed by the juggler
+	// These are needed for pulling Crossplane Helm charts from private OCI registries
+	for _, ps := range xpHelmChartPullSecrets {
+		if ps.Name == "" {
+			continue
+		}
+		sec := &component.PlatformSecret{
+			SourceClient: r.PlatformCluster.Client(),
+			Source: types.NamespacedName{
+				Name:      ps.Name,
+				Namespace: podNs,
+			},
+			Target: types.NamespacedName{
+				Name:      ps.Name,
+				Namespace: rcontext.TenantNamespace(ctx),
+			},
+			Enabled: xpComp.IsEnabled(),
+		}
+		comps = append(comps, sec)
 	}
 
 	if xp.Spec.Providers != nil {
+		// Validate that we have provider configurations when providers are requested
+		if len(pc.Spec.Providers.AvailableProviders) == 0 {
+			return nil, errors.New("providers are specified in Crossplane instance but no available providers configured in ProviderConfig")
+		}
+
+		pullSecrets := convertImagePullSecrets(pc.Spec.Providers.ImagePullSecrets)
 		for _, provider := range xp.Spec.Providers {
 			xpp := &component.CrossplaneProvider{
-				Config:  provider,
-				Enabled: xpComp.IsEnabled(),
+				Config:      provider,
+				Enabled:     xpComp.IsEnabled(),
+				PullSecrets: pullSecrets,
 			}
 			comps = append(comps, xpp)
 		}
 	}
 
 	jug.RegisterComponent(comps...)
+
+	logger.V(1).Info("Registered components for Crossplane instance",
+		"componentCount", len(comps),
+		"crossplaneName", xp.Name,
+		"crossplaneNamespace", xp.Namespace)
 
 	r.registerReconcilers(jug, logger, mcpClient)
 
@@ -390,6 +430,68 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.
 	}
 
 	return jug, nil
+}
+
+func convertImagePullSecrets(secrets []commonapi.LocalObjectReference) []corev1.LocalObjectReference {
+	if secrets == nil {
+		return nil
+	}
+	result := make([]corev1.LocalObjectReference, len(secrets))
+	for i, secret := range secrets {
+		result[i] = corev1.LocalObjectReference{
+			Name: secret.Name,
+		}
+	}
+	return result
+}
+
+// extractSecretNames extracts the names from a slice of LocalObjectReference
+func extractSecretNames(secrets []commonapi.LocalObjectReference) []string {
+	if len(secrets) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(secrets))
+	for _, secret := range secrets {
+		if secret.Name != "" {
+			result = append(result, secret.Name)
+		}
+	}
+	return result
+}
+
+// deduplicateSecretRefs removes duplicate secret references based on name
+func deduplicateSecretRefs(secrets []commonapi.LocalObjectReference) []commonapi.LocalObjectReference {
+	if len(secrets) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	result := []commonapi.LocalObjectReference{}
+
+	for _, secret := range secrets {
+		if secret.Name != "" && !seen[secret.Name] {
+			seen[secret.Name] = true
+			result = append(result, secret)
+		}
+	}
+
+	return result
+}
+
+func discoverCrossplaneHelmChartPullSecrets(xpversions []v1alpha1.CrossplaneVersion) []commonapi.LocalObjectReference {
+	secrets := make([]commonapi.LocalObjectReference, 0, len(xpversions))
+	for _, v := range xpversions {
+		secrets = append(secrets, v.Chart.SecretRef)
+	}
+	return deduplicateSecretRefs(secrets)
+}
+
+func discoverCrossplaneImagePullSecrets(xpversions []v1alpha1.CrossplaneVersion) []commonapi.LocalObjectReference {
+	secrets := make([]commonapi.LocalObjectReference, 0, len(xpversions))
+	for _, v := range xpversions {
+		secrets = append(secrets, v.Image.SecretRef)
+	}
+	return deduplicateSecretRefs(secrets)
 }
 
 func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, logger logr.Logger, mcpClient client.Client) {
@@ -405,6 +507,12 @@ func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, log
 		&component.CrossplaneProvider{},
 	)
 	juggler.RegisterReconciler(or)
+
+	por := object.NewReconciler(logger, r.PlatformCluster.Client(), sputils.LabelComponentName)
+	por.RegisterType(
+		&component.PlatformSecret{},
+	)
+	juggler.RegisterReconciler(por)
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -414,7 +522,8 @@ func (r *CrossplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		WithMCPScheme(scheme.MCP).
 		WithRetryInterval(10 * time.Second).
 		WithMCPPermissions(getMCPPermissions()).
-		WithMCPRoleRefs(getMCPRoleRefs())
+		WithMCPRoleRefs(getMCPRoleRefs()).
+		SkipWorkloadCluster()
 
 	// Initialize smart requeue store with sensible defaults:
 	// - Min interval: 5 seconds (quick retry for transient issues)
@@ -460,11 +569,11 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 		// Check if Crossplane is installable
 		if componentName == component.CrossplaneRelease {
 			// Check if available version matches the requested version
-			for _, availableVersion := range providerConfig.Spec.Chart.AvailableVersions {
-				if availableVersion == version {
+			for _, availableVersion := range providerConfig.Spec.CrossplaneVersions {
+				if availableVersion.Version == version {
 					return v1beta1.ComponentVersion{
-						HelmRepo:  providerConfig.Spec.Chart.Repository,
-						HelmChart: providerConfig.Spec.Chart.Name,
+						OCIURL:    availableVersion.Chart.URL, // format: <image-location>:<version>
+						DockerRef: availableVersion.Image.URL, // format: <image-location>:<version>
 						Version:   version,
 					}, nil
 				}
@@ -473,13 +582,13 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 		}
 
 		// Check if Provider is installable
-		for _, provider := range providerConfig.Spec.AvailableProviders {
+		for _, provider := range providerConfig.Spec.Providers.AvailableProviders {
 			if componentName == provider.Name {
 				// Provider exists, now lets check if version is available
 				for _, availableVersion := range provider.Versions {
 					if availableVersion == version {
 						return v1beta1.ComponentVersion{
-							DockerRef: provider.Package,
+							DockerRef: provider.Package + ":" + version, // format: <image-location>:<version>
 							Version:   version,
 						}, nil
 					}

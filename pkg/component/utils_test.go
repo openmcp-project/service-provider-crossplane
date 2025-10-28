@@ -36,13 +36,18 @@ var (
 	errValueNotFound = errors.New("value not found")
 )
 
+const (
+	testRegistry = "registry.example.com/"
+)
+
 func fakeVersionResolver(shouldFail bool) v1beta1.VersionResolverFn {
 	return func(componentName string, channelName string) (v1beta1.ComponentVersion, error) {
 		if shouldFail {
 			return v1beta1.ComponentVersion{}, errFake
 		}
 		return v1beta1.ComponentVersion{
-			DockerRef: strings.ToLower(componentName),
+			OCIURL:    testRegistry + strings.ToLower(componentName) + ":v1.0.0",
+			DockerRef: testRegistry + strings.ToLower(componentName) + ":v1.0.0",
 			Version:   "v1.0.0",
 		}, nil
 	}
@@ -132,13 +137,13 @@ func isFluxComponent(additionalValidations ...fluxValidationFunc) validationFunc
 	}
 }
 
-func returnsHelmRepo() fluxValidationFunc {
+func returnsOCIRepository() fluxValidationFunc {
 	return func(t *testing.T, ctx context.Context, c fluxcd.FluxComponent) {
 		s, err := c.BuildSourceRepository(ctx)
 		assert.NoError(t, err)
 
-		h, ok := s.(*fluxcd.HelmRepositoryAdapter)
-		if !assert.True(t, ok, "not a HelmRepositoryAdapter") {
+		h, ok := s.(*fluxcd.OCIRepositoryAdapter)
+		if !assert.True(t, ok, "not a OCIRepositoryAdapter") {
 			return
 		}
 		assert.NotNil(t, h.Source)

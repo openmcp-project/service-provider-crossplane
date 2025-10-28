@@ -10,6 +10,7 @@ includes:
       CODE_DIRS: '{{.ROOT_DIR}}/cmd/... {{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/api/v1alpha1/... {{.ROOT_DIR}}/pkg/...'
       COMPONENTS: 'service-provider-crossplane'
       REPO_URL: 'https://github.com/openmcp-project/service-provider-crossplane'
+      GENERATE_DOCS_INDEX: "true"
       CHART_COMPONENTS: "[]"
       CRDS_COMPONENTS: 'service-provider-crossplane'
       CRDS_PATH: '{{.ROOT_DIR}}/api/crds/manifests'

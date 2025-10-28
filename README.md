@@ -49,7 +49,8 @@ spec:
 ## 📖 Usage
 
 ### Configure a `ProviderConfig`
-A `ProviderConfig` is an API where you can configure the installation of a Crossplane instance in your `ManagedControlPlane`.
+A `ProviderConfig` is an API where you can configure an allow-list of Crossplane and provider installations in your `ManagedControlPlane`.
+The `ProviderConfig` is stored in the Platform cluster and therefore in the responsibility realm of the platform owner.
 
 ```yaml
 apiVersion: crossplane.services.openmcp.cloud/v1alpha1
@@ -57,18 +58,40 @@ kind: ProviderConfig
 metadata:
   name: default
 spec:
-  chart:
-    repository: "https://charts.crossplane.io/stable"
-    name: crossplane
-    availableVersions:
-      - v1.20.0
-      - v1.19.0
-  availableProviders:
-    - name: provider-kubernetes
-      package: xpkg.upbound.io/upbound/provider-kubernetes
-      versions:
-        - v0.16.0
+  versions:
+    - version: v2.0.2
+      chart:
+        url: "ghcr.io/openmcp-project/openmcp/charts/crossplane:2.0.2" # example OCI regsitry URL for Crosslane helm chart
+        secretRef: # optional
+          name: ghcr
+      image:
+        url: "xpkg.crossplane.io/crossplane/crossplane:2.0.2" # currently, upstream location but can be private registry as well
+        secretRef:
+          name: xyz # optional
+    - version: v1.20.0
+      chart:
+        url: "ghcr.io/openmcp-project/openmcp/charts/crossplane:1.20.0" # example OCI regsitry URL for Crosslane helm chart
+        secretRef: # optional
+          name: ghcr
+      image:
+        url: "xpkg.crossplane.io/crossplane/crossplane:1.20.0" # currently, upstream location but can be private registry as well
+        secretRef: # optional
+          name: xyz
+
+  providers:
+    availableProviders:
+      - name: provider-kubernetes
+        package: xpkg.upbound.io/upbound/provider-kubernetes
+        versions:
+          - v0.16.0
+          - v0.15.0
+    imagePullSecretRefs:
+      - name: secretforprivateproviders
+      - name: xyz
 ```
+
+The `ProviderConfig` allows you to specify secret references for private helm chart or image locations.
+NOTE: `ProvierConfig.spec.versions[].chart.url` needs to be image URL to an OCI registry.
 
 ### Install a Crossplane instance
 
@@ -79,11 +102,14 @@ metadata:
   name: crossplane-sample
   namespace: default
 spec:
-  version: v1.20.0
+  version: v1.20.0 # allowed version from ProviderConfig
   providers:
     - name: provider-kubernetes
-      version: v0.16.0
+      version: v0.16.0 # allowed version from ProviderConfig
 ```
+
+## 📚 Documentation
+More documentation for the service-provider-crossplane can be found in the [docs](./docs) folder.
 
 ## 🧑‍💻 Development
 

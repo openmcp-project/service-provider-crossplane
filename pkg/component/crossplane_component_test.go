@@ -57,7 +57,7 @@ func Test_Crossplane(t *testing.T) {
 					hasNamespace(CrossplaneNamespace),
 				),
 				isFluxComponent(
-					returnsHelmRepo(),
+					returnsOCIRepository(),
 					returnsHelmRelease(
 						hasKubeconfigRef(),
 						hasHelmValue(2, "replicas"), // custom value
@@ -74,6 +74,7 @@ func Test_Crossplane(t *testing.T) {
 			c := &Crossplane{
 				Config:               tC.config,
 				Values:               tC.configValues,
+				ChartPullSecretName:  "chart-pull-secret",
 				ImagePullSecretNames: tC.imagePullSecretNames,
 			}
 			for _, vfn := range tC.validationFuncs {

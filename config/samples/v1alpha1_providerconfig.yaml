@@ -3,16 +3,33 @@ kind: ProviderConfig
 metadata:
   name: default
 spec:
-  chart:
-    repository: "https://charts.crossplane.io/stable"
-    name: crossplane
-    availableVersions:
-      - v1.20.0
-      - v1.19.0
-  availableProviders:
-    - name: provider-kubernetes
-      package: xpkg.upbound.io/upbound/provider-kubernetes
-      versions:
-        - v0.16.0
-  imagePullSecrets:
-    - name: registry-secret
+  versions: # mapping of
+    - version: v2.0.2
+      chart:
+        url: "ghcr.io/openmcp-project/openmcp/charts/crossplane:2.0.2"
+        secretRef:
+          name: ghcr
+      image:
+        url: "ghcr.io/openmcp-project/openmcp/images/crossplane:2.0.2"
+        secretRef:
+          name: xyz
+    - version: v1.20.0
+      chart:
+        url: "ghcr.io/openmcp-project/openmcp/charts/crossplane:1.20.0"
+        secretRef:
+          name: ghcr
+      image:
+        url: "ghcr.io/openmcp-project/openmcp/images/crossplane:1.20.0"
+        secretRef:
+          name: xyz
+
+  providers:
+    availableProviders:
+      - name: provider-kubernetes
+        package: xpkg.upbound.io/upbound/provider-kubernetes
+        versions:
+          - v0.16.0
+          - v0.15.0
+    imagePullSecretRefs:
+      - name: secretforprivateproviders
+      - name: xyz
