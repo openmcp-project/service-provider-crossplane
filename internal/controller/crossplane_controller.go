@@ -208,7 +208,11 @@ func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl
 		return ctx, fmt.Errorf("failed to get MCP AccessRequest: %w", err)
 	}
 
-	ctx = rcontext.WithFluxKubeconfigRef(ctx, (*corev1.SecretReference)(mcpAccessRequest.Status.SecretRef))
+	secretRef := &corev1.SecretReference{
+		Name:      mcpAccessRequest.Status.SecretRef.Name,
+		Namespace: mcpAccessRequest.Namespace,
+	}
+	ctx = rcontext.WithFluxKubeconfigRef(ctx, secretRef)
 	return ctx, nil
 }
 
