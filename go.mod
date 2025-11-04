@@ -12,7 +12,7 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/openmcp-project/control-plane-operator v0.1.18
 	github.com/openmcp-project/controller-utils v0.23.2
-	github.com/openmcp-project/openmcp-operator/api v0.16.0
+	github.com/openmcp-project/openmcp-operator/api v0.17.0
 	github.com/openmcp-project/openmcp-operator/lib v0.16.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/text v0.30.0
