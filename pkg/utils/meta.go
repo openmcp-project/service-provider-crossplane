@@ -2,6 +2,7 @@
 package utils
 
 import (
+	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -37,4 +38,15 @@ func IsManaged() client.MatchingLabels {
 // HasComponentLabel returns a client.ListOption that matches objects with the component label.
 func HasComponentLabel() client.ListOption {
 	return client.HasLabels{LabelComponentName}
+}
+
+// LabelFunc sets the `managedBy` label to the passed in `managedByValue`
+// and the `component` label to the name of the component the function is called with.
+func LabelFunc(managedByValue string) juggler.LabelFunc {
+	return func(comp juggler.Component) map[string]string {
+		return map[string]string{
+			labelManagedBy:     managedByValue,
+			LabelComponentName: comp.GetName(),
+		}
+	}
 }
