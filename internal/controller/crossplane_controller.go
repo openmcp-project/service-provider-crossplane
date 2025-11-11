@@ -282,9 +282,8 @@ func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context,
 	// disable all components
 	xpCopy := xp.DeepCopy()
 	xpCopy.Spec = v1alpha1.CrossplaneSpec{}
-	// disable imagePullSecrets from ProviderConfig
-	pcCopy := pc.DeepCopy()
-	pcCopy.Spec = v1alpha1.ProviderConfigSpec{}
+	// remove secrets
+	pcCopy := removeSecrets(pc.DeepCopy())
 
 	j, err := r.newJuggler(ctx, mcpClient, xpCopy, pcCopy)
 	if err != nil {
@@ -347,8 +346,8 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.
 		return nil, errors.New("no Crossplane versions configured in ProviderConfig")
 	}
 
-	xpContainerImagePullSecrets := discoverCrossplaneImagePullSecrets(pc.Spec.CrossplaneVersions)
 	xpHelmChartPullSecrets := discoverCrossplaneHelmChartPullSecrets(pc.Spec.CrossplaneVersions)
+	xpContainerImagePullSecrets := discoverCrossplaneImagePullSecrets(pc.Spec.CrossplaneVersions)
 
 	xpComp := &component.Crossplane{
 		Config:               &xp.Spec,
@@ -496,6 +495,17 @@ func discoverCrossplaneImagePullSecrets(xpversions []v1alpha1.CrossplaneVersion)
 		secrets = append(secrets, v.Image.SecretRef)
 	}
 	return deduplicateSecretRefs(secrets)
+}
+
+func removeSecrets(pc *v1alpha1.ProviderConfig) *v1alpha1.ProviderConfig {
+	if len(pc.Spec.CrossplaneVersions) == 0 {
+		return pc
+	}
+	for _, cpv := range pc.Spec.CrossplaneVersions {
+		cpv.Image.SecretRef = commonapi.LocalObjectReference{}
+		cpv.Chart.SecretRef = commonapi.LocalObjectReference{}
+	}
+	return pc
 }
 
 func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, logger logr.Logger, mcpClient client.Client) {
