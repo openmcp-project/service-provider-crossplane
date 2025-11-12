@@ -501,10 +501,16 @@ func removeSecrets(pc *v1alpha1.ProviderConfig) *v1alpha1.ProviderConfig {
 	if len(pc.Spec.CrossplaneVersions) == 0 {
 		return pc
 	}
+
+	// Remove all secret references from CrossplaneVersions
 	for _, cpv := range pc.Spec.CrossplaneVersions {
 		cpv.Image.SecretRef = commonapi.LocalObjectReference{}
 		cpv.Chart.SecretRef = commonapi.LocalObjectReference{}
 	}
+
+	// Remove all secrets from Providers
+	pc.Spec.Providers.ImagePullSecrets = make([]commonapi.LocalObjectReference, 0)
+
 	return pc
 }
 
