@@ -408,6 +408,27 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.
 			return nil, errors.New("providers are specified in Crossplane instance but no available providers configured in ProviderConfig")
 		}
 
+		// Add Provider image pull secrets as components to be managed by the juggler.
+		// These are needed for pulling Crossplane provider images from private OCI registries
+		for _, ps := range pc.Spec.Providers.ImagePullSecrets {
+			if ps.Name == "" {
+				continue
+			}
+			sec := &component.Secret{
+				SourceClient: r.PlatformCluster.Client(),
+				Source: types.NamespacedName{
+					Name:      ps.Name,
+					Namespace: podNs,
+				},
+				Target: types.NamespacedName{
+					Name:      ps.Name,
+					Namespace: component.CrossplaneNamespace,
+				},
+				Enabled: xpComp.IsEnabled(),
+			}
+			comps = append(comps, sec)
+		}
+
 		pullSecrets := convertImagePullSecrets(pc.Spec.Providers.ImagePullSecrets)
 		for _, provider := range xp.Spec.Providers {
 			xpp := &component.CrossplaneProvider{
