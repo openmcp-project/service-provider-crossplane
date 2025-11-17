@@ -279,13 +279,11 @@ func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, mcp
 }
 
 func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
-	// disable all components
-	xpCopy := xp.DeepCopy()
-	xpCopy.Spec = v1alpha1.CrossplaneSpec{}
-	// remove secrets
-	pcCopy := removeSecrets(pc.DeepCopy())
-
-	j, err := r.newJuggler(ctx, mcpClient, xpCopy, pcCopy)
+	comps, err := buildComponents(ctx, r.PlatformCluster.Client(), xp, pc, false)
+	if err != nil {
+		return nil, errors.Join(errors.New("failed to build components for Crossplane instance"), err)
+	}
+	j, err := r.newJuggler(ctx, mcpClient, xp, comps)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +314,11 @@ func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context,
 }
 
 func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
-	j, err := r.newJuggler(ctx, mcpClient, xp, pc)
+	comps, err := buildComponents(ctx, r.PlatformCluster.Client(), xp, pc, true)
+	if err != nil {
+		return nil, errors.Join(errors.New("failed to build components for Crossplane instance"), err)
+	}
+	j, err := r.newJuggler(ctx, mcpClient, xp, comps)
 	if err != nil {
 		return nil, err
 	}
@@ -336,20 +338,35 @@ func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Cont
 }
 
 //nolint:gocyclo,prealloc
-func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) (*juggler.Juggler, error) {
+func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, components []juggler.Component) (*juggler.Juggler, error) {
 	logger := log.FromContext(ctx)
-	var comps []juggler.Component
 	jug := juggler.NewJuggler(logger, juggler.NewEventRecorder(r.Recorder, xp))
 
-	// Validate that we have Crossplane versions configured
-	if len(pc.Spec.CrossplaneVersions) == 0 {
-		return nil, errors.New("no Crossplane versions configured in ProviderConfig")
+	jug.RegisterComponent(components...)
+
+	logger.V(1).Info("Registered components for Crossplane instance",
+		"componentCount", len(components),
+		"crossplaneName", xp.Name,
+		"crossplaneNamespace", xp.Namespace)
+
+	r.registerReconcilers(jug, logger, mcpClient)
+
+	if err := jug.RegisterOrphanedComponents(ctx); err != nil {
+		return nil, err
 	}
+
+	return jug, nil
+}
+
+// buildComponents builds the components for the Crossplane instance based on its spec and the ProviderConfig.
+func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig, enabled bool) ([]juggler.Component, error) {
+	comps := make([]juggler.Component, 0)
 
 	xpHelmChartPullSecrets := discoverCrossplaneHelmChartPullSecrets(pc.Spec.CrossplaneVersions)
 	xpContainerImagePullSecrets := discoverCrossplaneImagePullSecrets(pc.Spec.CrossplaneVersions)
 
 	xpComp := &component.Crossplane{
+		Enabled:              enabled,
 		Config:               &xp.Spec,
 		ChartPullSecretName:  extractSecretNames(xpHelmChartPullSecrets)[0],
 		ImagePullSecretNames: extractSecretNames(xpContainerImagePullSecrets),
@@ -362,24 +379,13 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.
 	if podNs == "" {
 		return nil, fmt.Errorf("environment variable %s not set - cannot determine source namespace for secrets", openmcpconsts.EnvVariablePodNamespace)
 	}
-	for _, ps := range xpContainerImagePullSecrets {
-		if ps.Name == "" {
-			continue
-		}
-		sec := &component.Secret{
-			SourceClient: r.PlatformCluster.Client(),
-			Source: types.NamespacedName{
-				Name:      ps.Name,
-				Namespace: podNs,
-			},
-			Target: types.NamespacedName{
-				Name:      ps.Name,
-				Namespace: component.CrossplaneNamespace,
-			},
-			Enabled: xpComp.IsEnabled(),
-		}
-		comps = append(comps, sec)
-	}
+
+	// Add Crossplane image pull secrets as components to be managed by the juggler.
+	comps = append(comps, buildSecrets(client, xpContainerImagePullSecrets, podNs, component.CrossplaneNamespace, xpComp.IsEnabled())...)
+
+	// Add Provider image pull secrets as components to be managed by the juggler.
+	// These are needed for pulling Crossplane provider images from private OCI registries
+	comps = append(comps, buildSecrets(client, pc.Spec.Providers.ImagePullSecrets, podNs, component.CrossplaneNamespace, xpComp.IsEnabled())...)
 
 	// Add Helm chart pull secrets as components to be managed by the juggler
 	// These are needed for pulling Crossplane Helm charts from private OCI registries
@@ -388,7 +394,7 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.
 			continue
 		}
 		sec := &component.PlatformSecret{
-			SourceClient: r.PlatformCluster.Client(),
+			SourceClient: client,
 			Source: types.NamespacedName{
 				Name:      ps.Name,
 				Namespace: podNs,
@@ -408,27 +414,6 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.
 			return nil, errors.New("providers are specified in Crossplane instance but no available providers configured in ProviderConfig")
 		}
 
-		// Add Provider image pull secrets as components to be managed by the juggler.
-		// These are needed for pulling Crossplane provider images from private OCI registries
-		for _, ps := range pc.Spec.Providers.ImagePullSecrets {
-			if ps.Name == "" {
-				continue
-			}
-			sec := &component.Secret{
-				SourceClient: r.PlatformCluster.Client(),
-				Source: types.NamespacedName{
-					Name:      ps.Name,
-					Namespace: podNs,
-				},
-				Target: types.NamespacedName{
-					Name:      ps.Name,
-					Namespace: component.CrossplaneNamespace,
-				},
-				Enabled: xpComp.IsEnabled(),
-			}
-			comps = append(comps, sec)
-		}
-
 		pullSecrets := convertImagePullSecrets(pc.Spec.Providers.ImagePullSecrets)
 		for _, provider := range xp.Spec.Providers {
 			xpp := &component.CrossplaneProvider{
@@ -439,21 +424,30 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.
 			comps = append(comps, xpp)
 		}
 	}
+	return comps, nil
+}
 
-	jug.RegisterComponent(comps...)
-
-	logger.V(1).Info("Registered components for Crossplane instance",
-		"componentCount", len(comps),
-		"crossplaneName", xp.Name,
-		"crossplaneNamespace", xp.Namespace)
-
-	r.registerReconcilers(jug, logger, mcpClient)
-
-	if err := jug.RegisterOrphanedComponents(ctx); err != nil {
-		return nil, err
+func buildSecrets(c client.Client, secretRefs []commonapi.LocalObjectReference, sourceNamespace string, targetNamespace string, enabled bool) []juggler.Component {
+	secrets := make([]juggler.Component, 0, len(secretRefs))
+	for _, ps := range secretRefs {
+		if ps.Name == "" {
+			continue
+		}
+		secret := &component.Secret{
+			SourceClient: c,
+			Source: types.NamespacedName{
+				Name:      ps.Name,
+				Namespace: sourceNamespace,
+			},
+			Target: types.NamespacedName{
+				Name:      ps.Name,
+				Namespace: targetNamespace,
+			},
+			Enabled: enabled,
+		}
+		secrets = append(secrets, secret)
 	}
-
-	return jug, nil
+	return secrets
 }
 
 func convertImagePullSecrets(secrets []commonapi.LocalObjectReference) []corev1.LocalObjectReference {
@@ -516,23 +510,6 @@ func discoverCrossplaneImagePullSecrets(xpversions []v1alpha1.CrossplaneVersion)
 		secrets = append(secrets, v.Image.SecretRef)
 	}
 	return deduplicateSecretRefs(secrets)
-}
-
-func removeSecrets(pc *v1alpha1.ProviderConfig) *v1alpha1.ProviderConfig {
-	if len(pc.Spec.CrossplaneVersions) == 0 {
-		return pc
-	}
-
-	// Remove all secret references from CrossplaneVersions
-	for _, cpv := range pc.Spec.CrossplaneVersions {
-		cpv.Image.SecretRef = commonapi.LocalObjectReference{}
-		cpv.Chart.SecretRef = commonapi.LocalObjectReference{}
-	}
-
-	// Remove all secrets from Providers
-	pc.Spec.Providers.ImagePullSecrets = make([]commonapi.LocalObjectReference, 0)
-
-	return pc
 }
 
 func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, logger logr.Logger, mcpClient client.Client) {

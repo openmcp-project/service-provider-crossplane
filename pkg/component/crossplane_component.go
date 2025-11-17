@@ -46,6 +46,7 @@ type Crossplane struct {
 	Values               *apiextensionsv1.JSON `json:"values,omitempty"`
 	ChartPullSecretName  string
 	ImagePullSecretNames []string
+	Enabled              bool
 }
 
 // GetNamespace implements TargetComponent.
@@ -141,7 +142,7 @@ func (*Crossplane) GetDependencies() []juggler.Component {
 
 // IsEnabled implements Component.
 func (c *Crossplane) IsEnabled() bool {
-	return c.Config != nil && c.Config.Version != ""
+	return c.Enabled
 }
 
 func (c *Crossplane) applyDefaultValues(rfn v1beta1.VersionResolverFn) error {
