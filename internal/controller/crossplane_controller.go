@@ -380,12 +380,14 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 		return nil, fmt.Errorf("environment variable %s not set - cannot determine source namespace for secrets", openmcpconsts.EnvVariablePodNamespace)
 	}
 
+	distinctSecretComponents := make([]juggler.Component, 0)
 	// Add Crossplane image pull secrets as components to be managed by the juggler.
-	comps = append(comps, buildSecrets(client, xpContainerImagePullSecrets, podNs, component.CrossplaneNamespace, xpComp.IsEnabled())...)
-
+	distinctSecretComponents = appendDistinct(distinctSecretComponents, buildSecretsComponents(client, xpContainerImagePullSecrets, podNs, component.CrossplaneNamespace, xpComp.IsEnabled())...)
 	// Add Provider image pull secrets as components to be managed by the juggler.
 	// These are needed for pulling Crossplane provider images from private OCI registries
-	comps = append(comps, buildSecrets(client, pc.Spec.Providers.ImagePullSecrets, podNs, component.CrossplaneNamespace, xpComp.IsEnabled())...)
+	distinctSecretComponents = appendDistinct(distinctSecretComponents, buildSecretsComponents(client, pc.Spec.Providers.ImagePullSecrets, podNs, component.CrossplaneNamespace, xpComp.IsEnabled())...)
+
+	comps = append(comps, distinctSecretComponents...)
 
 	// Add Helm chart pull secrets as components to be managed by the juggler
 	// These are needed for pulling Crossplane Helm charts from private OCI registries
@@ -427,7 +429,37 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 	return comps, nil
 }
 
-func buildSecrets(c client.Client, secretRefs []commonapi.LocalObjectReference, sourceNamespace string, targetNamespace string, enabled bool) []juggler.Component {
+func appendDistinct(slice []juggler.Component, elems ...juggler.Component) []juggler.Component {
+	for _, elem := range elems {
+		found := false
+		for _, existing := range slice {
+			// Check if components are the same based on their target name and namespace
+			if getComponentKey(existing) == getComponentKey(elem) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			slice = append(slice, elem)
+		}
+	}
+	return slice
+}
+
+func getComponentKey(comp juggler.Component) string {
+	// For secret components, create a unique key based on target name and namespace
+	switch c := comp.(type) {
+	case *component.Secret:
+		return c.Target.Namespace + "/" + c.Target.Name
+	case *component.PlatformSecret:
+		return c.Target.Namespace + "/" + c.Target.Name
+	default:
+		// For other component types, use the component name
+		return comp.GetName()
+	}
+}
+
+func buildSecretsComponents(c client.Client, secretRefs []commonapi.LocalObjectReference, sourceNamespace string, targetNamespace string, enabled bool) []juggler.Component {
 	secrets := make([]juggler.Component, 0, len(secretRefs))
 	for _, ps := range secretRefs {
 		if ps.Name == "" {
