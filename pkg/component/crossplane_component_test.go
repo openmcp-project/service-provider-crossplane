@@ -4,9 +4,8 @@ package component
 import (
 	"testing"
 
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 )
@@ -17,6 +16,7 @@ func Test_Crossplane(t *testing.T) {
 		config               *v1alpha1.CrossplaneSpec
 		configValues         *apiextensionsv1.JSON
 		imagePullSecretNames []string
+		enabled              bool
 		versionResolver      v1beta1.VersionResolverFn
 		validationFuncs      []validationFunc
 	}{
@@ -32,6 +32,7 @@ func Test_Crossplane(t *testing.T) {
 			config: &v1alpha1.CrossplaneSpec{
 				Version: "1.2.3",
 			},
+			enabled:         true,
 			versionResolver: fakeVersionResolver(true),
 			validationFuncs: []validationFunc{
 				hasName("Crossplane"),
@@ -46,6 +47,7 @@ func Test_Crossplane(t *testing.T) {
 			},
 			configValues:         &apiextensionsv1.JSON{Raw: []byte(`{"replicas":2}`)},
 			imagePullSecretNames: []string{"secret-1", "secret-2"},
+			enabled:              true,
 			versionResolver:      fakeVersionResolver(false),
 			validationFuncs: []validationFunc{
 				hasName("Crossplane"),
@@ -76,6 +78,7 @@ func Test_Crossplane(t *testing.T) {
 				Values:               tC.configValues,
 				ChartPullSecretName:  "chart-pull-secret",
 				ImagePullSecretNames: tC.imagePullSecretNames,
+				Enabled:              tC.enabled,
 			}
 			for _, vfn := range tC.validationFuncs {
 				vfn(t, ctx, c)
