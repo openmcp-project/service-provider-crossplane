@@ -509,7 +509,7 @@ func extractSecretNames(secrets []commonapi.LocalObjectReference) []string {
 	return result
 }
 
-// extractFirstSecretName extracts the names from a slice of LocalObjectReference and returns the first one or empty string
+// extractFirstSecretName extracts the first not-empty name from a slice of LocalObjectReference
 func extractFirstSecretName(secrets []commonapi.LocalObjectReference) string {
 	if len(secrets) == 0 {
 		return ""
