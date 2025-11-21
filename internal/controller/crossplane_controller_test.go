@@ -203,8 +203,6 @@ func Test_buildComponents(t *testing.T) {
 			enabled: true,
 		},
 		want: []juggler.Component{
-			// Components expected to be built containing ALL (platform)secrets from providerConfig,
-			// regardless of whether they are used by Crossplane or its providers
 			&component.Crossplane{
 				Enabled: true,
 				Config: &v1alpha1.CrossplaneSpec{
@@ -369,7 +367,7 @@ func Test_buildComponents(t *testing.T) {
 			},
 			want: []juggler.Component{
 				// Components expected to be built containing ALL (platform)secrets from providerConfig,
-				// regardless of whether they are used by Crossplane or its providers
+				// regardless of whether they are used by Crossplane or its providers. Duplicates removed.
 				&component.Crossplane{
 					Enabled: true,
 					Config: &v1alpha1.CrossplaneSpec{
@@ -406,7 +404,7 @@ func Test_buildComponents(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "Components are built and NOT enabled",
+			name: "Components are built and disabled (for deletion)",
 			args: args{
 				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
 				client:          nil,
