@@ -166,9 +166,61 @@ func Test_buildComponents(t *testing.T) {
 		args    args
 		want    []juggler.Component
 		wantErr error
-	}{
+	}{{
+		name: "Crossplane and crossplane-provider components are built and enabled",
+		args: args{
+			ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
+			client:          nil,
+			setPodNamespace: true,
+			xp: &v1alpha1.Crossplane{
+				Spec: v1alpha1.CrossplaneSpec{
+					Version:   "v1.0.0",
+					Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
+				},
+			},
+			pc: &v1alpha1.ProviderConfig{
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+						},
+						{
+							Version: "v2.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2"},
+							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/2"},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{
+						AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
+							{Name: "provider-1", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws:v0.1.0"},
+							{Name: "provider-2", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-other:v0.1.0"},
+						},
+					},
+				},
+			},
+			enabled: true,
+		},
+		want: []juggler.Component{
+			// Components expected to be built containing ALL (platform)secrets from providerConfig,
+			// regardless of whether they are used by Crossplane or its providers
+			&component.Crossplane{
+				Enabled: true,
+				Config: &v1alpha1.CrossplaneSpec{
+					Version:   "v1.0.0",
+					Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
+				},
+			},
+			&component.CrossplaneProvider{
+				Enabled: true,
+				Config:  &v1alpha1.CrossplaneProviderConfig{Name: "provider-1", Version: "v0.1.0"},
+			},
+		},
+		wantErr: nil,
+	},
 		{
-			name: "Crossplane components are built and enabled",
+			name: "Crossplane, crossplane-provider, platform-secret and secret components are built and enabled",
 			args: args{
 				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
 				client:          nil,
@@ -354,7 +406,7 @@ func Test_buildComponents(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "Crossplane components are built and NOT enabled",
+			name: "Components are built and NOT enabled",
 			args: args{
 				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
 				client:          nil,
