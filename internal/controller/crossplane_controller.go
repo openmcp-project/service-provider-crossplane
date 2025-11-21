@@ -368,7 +368,7 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 	xpComp := &component.Crossplane{
 		Enabled:              enabled,
 		Config:               &xp.Spec,
-		ChartPullSecretName:  extractSecretNames(xpHelmChartPullSecrets)[0],
+		ChartPullSecretName:  extractFirstSecretName(xpHelmChartPullSecrets),
 		ImagePullSecretNames: extractSecretNames(xpContainerImagePullSecrets),
 	}
 	comps = append(comps, xpComp)
@@ -507,6 +507,19 @@ func extractSecretNames(secrets []commonapi.LocalObjectReference) []string {
 		}
 	}
 	return result
+}
+
+// extractFirstSecretName extracts the first not-empty name from a slice of LocalObjectReference
+func extractFirstSecretName(secrets []commonapi.LocalObjectReference) string {
+	if len(secrets) == 0 {
+		return ""
+	}
+	for _, secret := range secrets {
+		if secret.Name != "" {
+			return secret.Name
+		}
+	}
+	return ""
 }
 
 // deduplicateSecretRefs removes duplicate secret references based on name
