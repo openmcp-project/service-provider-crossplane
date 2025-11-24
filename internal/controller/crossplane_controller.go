@@ -509,19 +509,6 @@ func extractSecretNames(secrets []commonapi.LocalObjectReference) []string {
 	return result
 }
 
-// extractFirstSecretName extracts the first not-empty name from a slice of LocalObjectReference
-func extractFirstSecretName(secrets []commonapi.LocalObjectReference) string {
-	if len(secrets) == 0 {
-		return ""
-	}
-	for _, secret := range secrets {
-		if secret.Name != "" {
-			return secret.Name
-		}
-	}
-	return ""
-}
-
 // deduplicateSecretRefs removes duplicate secret references based on name
 func deduplicateSecretRefs(secrets []commonapi.LocalObjectReference) []commonapi.LocalObjectReference {
 	if len(secrets) == 0 {
