@@ -549,14 +549,14 @@ func discoverCrossplaneImagePullSecrets(spec v1alpha1.CrossplaneSpec, xpversions
 
 func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, logger logr.Logger, mcpClient client.Client) {
 	fr := fluxcd.NewFluxReconciler(logger, r.PlatformCluster.Client(), mcpClient, sputils.LabelComponentName).
-		WithLabelFunc(sputils.LabelFunc(component.ComponentNameCrossplane))
+		WithLabelFunc(sputils.LabelFunc(sputils.LabelManagedByValue))
 	fr.RegisterType(
 		&component.Crossplane{},
 	)
 	juggler.RegisterReconciler(fr)
 
 	or := object.NewReconciler(logger, mcpClient, sputils.LabelComponentName).
-		WithLabelFunc(sputils.LabelFunc(component.ComponentNameCrossplane))
+		WithLabelFunc(sputils.LabelFunc(sputils.LabelManagedByValue))
 	or.RegisterType(
 		&component.Secret{},
 		&component.CrossplaneProvider{},
@@ -564,7 +564,7 @@ func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, log
 	juggler.RegisterReconciler(or)
 
 	por := object.NewReconciler(logger, r.PlatformCluster.Client(), sputils.LabelComponentName).
-		WithLabelFunc(sputils.LabelFunc(component.ComponentNameCrossplane))
+		WithLabelFunc(sputils.LabelFunc(sputils.LabelManagedByValue))
 	por.RegisterType(
 		&component.PlatformSecret{},
 	)

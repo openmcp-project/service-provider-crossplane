@@ -7,7 +7,7 @@ import (
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/components"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/object"
-	"github.com/openmcp-project/control-plane-operator/pkg/utils"
+	"github.com/openmcp-project/service-provider-crossplane/pkg/utils"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	corev1 "k8s.io/api/core/v1"

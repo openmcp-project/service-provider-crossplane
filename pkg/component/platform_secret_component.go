@@ -5,7 +5,7 @@ import (
 
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/object"
-	"github.com/openmcp-project/control-plane-operator/pkg/utils"
+	"github.com/openmcp-project/service-provider-crossplane/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
