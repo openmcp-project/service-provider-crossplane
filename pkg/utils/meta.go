@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	labelManagedBy      = "app.kubernetes.io/managed-by"
+	labelManagedBy = "app.kubernetes.io/managed-by"
+	// LabelManagedByValue is the value used for the "app.kubernetes.io/managed-by" label of this Service Provider.
 	LabelManagedByValue = "service-provider-crossplane"
 	// LabelComponentName is the label used to identify components added by the Service Provider in an MCP.
 	LabelComponentName = "services.openmcp.cloud/component"
