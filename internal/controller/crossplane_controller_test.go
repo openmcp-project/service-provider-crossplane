@@ -166,57 +166,58 @@ func Test_buildComponents(t *testing.T) {
 		args    args
 		want    []juggler.Component
 		wantErr error
-	}{{
-		name: "Crossplane and crossplane-provider components are built and enabled",
-		args: args{
-			ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
-			client:          nil,
-			setPodNamespace: true,
-			xp: &v1alpha1.Crossplane{
-				Spec: v1alpha1.CrossplaneSpec{
-					Version:   "v1.0.0",
-					Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
-				},
-			},
-			pc: &v1alpha1.ProviderConfig{
-				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-						{
-							Version: "v1.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
-						},
-						{
-							Version: "v2.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2"},
-							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/2"},
-						},
-					},
-					Providers: v1alpha1.CrossplaneProviders{
-						AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
-							{Name: "provider-1", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws:v0.1.0"},
-							{Name: "provider-2", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-other:v0.1.0"},
-						},
+	}{
+		{
+			name: "Crossplane and crossplane-provider components are built and enabled",
+			args: args{
+				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
+				client:          nil,
+				setPodNamespace: true,
+				xp: &v1alpha1.Crossplane{
+					Spec: v1alpha1.CrossplaneSpec{
+						Version:   "v1.0.0",
+						Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
 					},
 				},
+				pc: &v1alpha1.ProviderConfig{
+					Spec: v1alpha1.ProviderConfigSpec{
+						CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+							{
+								Version: "v1.0.0",
+								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							},
+							{
+								Version: "v2.0.0",
+								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2"},
+								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/2"},
+							},
+						},
+						Providers: v1alpha1.CrossplaneProviders{
+							AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
+								{Name: "provider-1", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws:v0.1.0"},
+								{Name: "provider-2", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-other:v0.1.0"},
+							},
+						},
+					},
+				},
+				enabled: true,
 			},
-			enabled: true,
-		},
-		want: []juggler.Component{
-			&component.Crossplane{
-				Enabled: true,
-				Config: &v1alpha1.CrossplaneSpec{
-					Version:   "v1.0.0",
-					Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
+			want: []juggler.Component{
+				&component.Crossplane{
+					Enabled: true,
+					Config: &v1alpha1.CrossplaneSpec{
+						Version:   "v1.0.0",
+						Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
+					},
+				},
+				&component.CrossplaneProvider{
+					Enabled: true,
+					Config:  &v1alpha1.CrossplaneProviderConfig{Name: "provider-1", Version: "v0.1.0"},
 				},
 			},
-			&component.CrossplaneProvider{
-				Enabled: true,
-				Config:  &v1alpha1.CrossplaneProviderConfig{Name: "provider-1", Version: "v0.1.0"},
-			},
+			wantErr: nil,
 		},
-		wantErr: nil,
-	},
 		{
 			name: "Crossplane, crossplane-provider, platform-secret and secret components are built and enabled",
 			args: args{
@@ -225,7 +226,7 @@ func Test_buildComponents(t *testing.T) {
 				setPodNamespace: true,
 				xp: &v1alpha1.Crossplane{
 					Spec: v1alpha1.CrossplaneSpec{
-						Version:   "v1.0.0",
+						Version:   "v2.0.0",
 						Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
 					},
 				},
@@ -258,13 +259,10 @@ func Test_buildComponents(t *testing.T) {
 				// Components expected to be built containing ALL (platform)secrets from providerConfig,
 				// regardless of whether they are used by Crossplane or its providers
 				&component.Crossplane{
-					Enabled: true,
-					Config: &v1alpha1.CrossplaneSpec{
-						Version:   "v1.0.0",
-						Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
-					},
-					ChartPullSecretName:  "chart-secret",
-					ImagePullSecretNames: []string{"image-secret", "other-image-secret"},
+					Enabled:              true,
+					Config:               &v1alpha1.CrossplaneSpec{Version: "v2.0.0", Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}}},
+					ChartPullSecretName:  "other-chart-secret",
+					ImagePullSecretNames: []string{"other-image-secret"},
 				},
 				&component.CrossplaneProvider{
 					Enabled:     true,
@@ -273,57 +271,27 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.PlatformSecret{
 					SourceClient: nil,
-					Source:       client.ObjectKey{Name: "chart-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "chart-secret",
-						Namespace: "tenant-namespace",
-					},
-					Enabled: true,
-				},
-				&component.PlatformSecret{
-					SourceClient: nil,
 					Source:       client.ObjectKey{Name: "other-chart-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "other-chart-secret",
-						Namespace: "tenant-namespace",
-					},
-					Enabled: true,
-				},
-				&component.Secret{
-					SourceClient: nil,
-					Source:       client.ObjectKey{Name: "image-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "image-secret",
-						Namespace: component.CrossplaneNamespace,
-					},
-					Enabled: true,
+					Target:       client.ObjectKey{Name: "other-chart-secret", Namespace: "tenant-namespace"},
+					Enabled:      true,
 				},
 				&component.Secret{
 					SourceClient: nil,
 					Source:       client.ObjectKey{Name: "other-image-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "other-image-secret",
-						Namespace: component.CrossplaneNamespace,
-					},
-					Enabled: true,
+					Target:       client.ObjectKey{Name: "other-image-secret", Namespace: component.CrossplaneNamespace},
+					Enabled:      true,
 				},
 				&component.Secret{
 					SourceClient: nil,
 					Source:       client.ObjectKey{Name: "provider-image-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "provider-image-secret",
-						Namespace: component.CrossplaneNamespace,
-					},
-					Enabled: true,
+					Target:       client.ObjectKey{Name: "provider-image-secret", Namespace: component.CrossplaneNamespace},
+					Enabled:      true,
 				},
 				&component.Secret{
 					SourceClient: nil,
 					Source:       client.ObjectKey{Name: "other-provider-image-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "other-provider-image-secret",
-						Namespace: component.CrossplaneNamespace,
-					},
-					Enabled: true,
+					Target:       client.ObjectKey{Name: "other-provider-image-secret", Namespace: component.CrossplaneNamespace},
+					Enabled:      true,
 				},
 			},
 			wantErr: nil,
@@ -385,20 +353,14 @@ func Test_buildComponents(t *testing.T) {
 				&component.PlatformSecret{
 					SourceClient: nil,
 					Source:       client.ObjectKey{Name: "chart-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "chart-secret",
-						Namespace: "tenant-namespace",
-					},
-					Enabled: true,
+					Target:       client.ObjectKey{Name: "chart-secret", Namespace: "tenant-namespace"},
+					Enabled:      true,
 				},
 				&component.Secret{
 					SourceClient: nil,
 					Source:       client.ObjectKey{Name: "image-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "image-secret",
-						Namespace: component.CrossplaneNamespace,
-					},
-					Enabled: true,
+					Target:       client.ObjectKey{Name: "image-secret", Namespace: component.CrossplaneNamespace},
+					Enabled:      true,
 				},
 			},
 			wantErr: nil,
@@ -450,7 +412,7 @@ func Test_buildComponents(t *testing.T) {
 						Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
 					},
 					ChartPullSecretName:  "chart-secret",
-					ImagePullSecretNames: []string{"image-secret", "other-image-secret"},
+					ImagePullSecretNames: []string{"image-secret"},
 				},
 				&component.CrossplaneProvider{
 					Enabled:     false,
@@ -460,56 +422,26 @@ func Test_buildComponents(t *testing.T) {
 				&component.PlatformSecret{
 					SourceClient: nil,
 					Source:       client.ObjectKey{Name: "chart-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "chart-secret",
-						Namespace: "tenant-namespace",
-					},
-					Enabled: false,
-				},
-				&component.PlatformSecret{
-					SourceClient: nil,
-					Source:       client.ObjectKey{Name: "other-chart-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "other-chart-secret",
-						Namespace: "tenant-namespace",
-					},
-					Enabled: false,
+					Target:       client.ObjectKey{Name: "chart-secret", Namespace: "tenant-namespace"},
+					Enabled:      false,
 				},
 				&component.Secret{
 					SourceClient: nil,
 					Source:       client.ObjectKey{Name: "image-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "image-secret",
-						Namespace: component.CrossplaneNamespace,
-					},
-					Enabled: false,
-				},
-				&component.Secret{
-					SourceClient: nil,
-					Source:       client.ObjectKey{Name: "other-image-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "other-image-secret",
-						Namespace: component.CrossplaneNamespace,
-					},
-					Enabled: false,
+					Target:       client.ObjectKey{Name: "image-secret", Namespace: component.CrossplaneNamespace},
+					Enabled:      false,
 				},
 				&component.Secret{
 					SourceClient: nil,
 					Source:       client.ObjectKey{Name: "provider-image-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "provider-image-secret",
-						Namespace: component.CrossplaneNamespace,
-					},
-					Enabled: false,
+					Target:       client.ObjectKey{Name: "provider-image-secret", Namespace: component.CrossplaneNamespace},
+					Enabled:      false,
 				},
 				&component.Secret{
 					SourceClient: nil,
 					Source:       client.ObjectKey{Name: "other-provider-image-secret", Namespace: "pod-namespace"},
-					Target: client.ObjectKey{
-						Name:      "other-provider-image-secret",
-						Namespace: component.CrossplaneNamespace,
-					},
-					Enabled: false,
+					Target:       client.ObjectKey{Name: "other-provider-image-secret", Namespace: component.CrossplaneNamespace},
+					Enabled:      false,
 				},
 			},
 			wantErr: nil,

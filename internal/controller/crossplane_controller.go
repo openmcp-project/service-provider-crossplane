@@ -362,13 +362,16 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.
 func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig, enabled bool) ([]juggler.Component, error) {
 	comps := make([]juggler.Component, 0)
 
-	xpHelmChartPullSecrets := discoverCrossplaneHelmChartPullSecrets(pc.Spec.CrossplaneVersions)
-	xpContainerImagePullSecrets := discoverCrossplaneImagePullSecrets(pc.Spec.CrossplaneVersions)
+	xpHelmChartPullSecret, err := extractHelmChartPullSecretForVersion(xp.Spec.Version, pc.Spec.CrossplaneVersions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract Crossplane Helm chart pull secret for version %s: %w", xp.Spec.Version, err)
+	}
+	xpContainerImagePullSecrets := discoverCrossplaneImagePullSecrets(xp.Spec, pc.Spec.CrossplaneVersions)
 
 	xpComp := &component.Crossplane{
 		Enabled:              enabled,
 		Config:               &xp.Spec,
-		ChartPullSecretName:  extractFirstSecretName(xpHelmChartPullSecrets),
+		ChartPullSecretName:  xpHelmChartPullSecret.Name,
 		ImagePullSecretNames: extractSecretNames(xpContainerImagePullSecrets),
 	}
 	comps = append(comps, xpComp)
@@ -389,20 +392,17 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 
 	comps = append(comps, distinctSecretComponents...)
 
-	// Add Helm chart pull secrets as components to be managed by the juggler
+	// Add Helm chart pull secret as components to be managed by the juggler.
 	// These are needed for pulling Crossplane Helm charts from private OCI registries
-	for _, ps := range xpHelmChartPullSecrets {
-		if ps.Name == "" {
-			continue
-		}
+	if xpHelmChartPullSecret.Name != "" {
 		sec := &component.PlatformSecret{
 			SourceClient: client,
 			Source: types.NamespacedName{
-				Name:      ps.Name,
+				Name:      xpHelmChartPullSecret.Name,
 				Namespace: podNs,
 			},
 			Target: types.NamespacedName{
-				Name:      ps.Name,
+				Name:      xpHelmChartPullSecret.Name,
 				Namespace: rcontext.TenantNamespace(ctx),
 			},
 			Enabled: xpComp.IsEnabled(),
@@ -509,19 +509,6 @@ func extractSecretNames(secrets []commonapi.LocalObjectReference) []string {
 	return result
 }
 
-// extractFirstSecretName extracts the first not-empty name from a slice of LocalObjectReference
-func extractFirstSecretName(secrets []commonapi.LocalObjectReference) string {
-	if len(secrets) == 0 {
-		return ""
-	}
-	for _, secret := range secrets {
-		if secret.Name != "" {
-			return secret.Name
-		}
-	}
-	return ""
-}
-
 // deduplicateSecretRefs removes duplicate secret references based on name
 func deduplicateSecretRefs(secrets []commonapi.LocalObjectReference) []commonapi.LocalObjectReference {
 	if len(secrets) == 0 {
@@ -541,32 +528,35 @@ func deduplicateSecretRefs(secrets []commonapi.LocalObjectReference) []commonapi
 	return result
 }
 
-func discoverCrossplaneHelmChartPullSecrets(xpversions []v1alpha1.CrossplaneVersion) []commonapi.LocalObjectReference {
-	secrets := make([]commonapi.LocalObjectReference, 0, len(xpversions))
+func extractHelmChartPullSecretForVersion(targetVersion string, xpversions []v1alpha1.CrossplaneVersion) (*commonapi.LocalObjectReference, error) {
 	for _, v := range xpversions {
-		secrets = append(secrets, v.Chart.SecretRef)
+		if targetVersion == v.Version {
+			return &v.Chart.SecretRef, nil
+		}
 	}
-	return deduplicateSecretRefs(secrets)
+	return nil, errors.New("no matching version")
 }
 
-func discoverCrossplaneImagePullSecrets(xpversions []v1alpha1.CrossplaneVersion) []commonapi.LocalObjectReference {
+func discoverCrossplaneImagePullSecrets(spec v1alpha1.CrossplaneSpec, xpversions []v1alpha1.CrossplaneVersion) []commonapi.LocalObjectReference {
 	secrets := make([]commonapi.LocalObjectReference, 0, len(xpversions))
 	for _, v := range xpversions {
-		secrets = append(secrets, v.Image.SecretRef)
+		if spec.Version == v.Version {
+			secrets = append(secrets, v.Image.SecretRef)
+		}
 	}
 	return deduplicateSecretRefs(secrets)
 }
 
 func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, logger logr.Logger, mcpClient client.Client) {
 	fr := fluxcd.NewFluxReconciler(logger, r.PlatformCluster.Client(), mcpClient, sputils.LabelComponentName).
-		WithLabelFunc(sputils.LabelFunc(component.ComponentNameCrossplane))
+		WithLabelFunc(sputils.LabelFunc(sputils.LabelManagedByValue))
 	fr.RegisterType(
 		&component.Crossplane{},
 	)
 	juggler.RegisterReconciler(fr)
 
 	or := object.NewReconciler(logger, mcpClient, sputils.LabelComponentName).
-		WithLabelFunc(sputils.LabelFunc(component.ComponentNameCrossplane))
+		WithLabelFunc(sputils.LabelFunc(sputils.LabelManagedByValue))
 	or.RegisterType(
 		&component.Secret{},
 		&component.CrossplaneProvider{},
@@ -574,7 +564,7 @@ func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, log
 	juggler.RegisterReconciler(or)
 
 	por := object.NewReconciler(logger, r.PlatformCluster.Client(), sputils.LabelComponentName).
-		WithLabelFunc(sputils.LabelFunc(component.ComponentNameCrossplane))
+		WithLabelFunc(sputils.LabelFunc(sputils.LabelManagedByValue))
 	por.RegisterType(
 		&component.PlatformSecret{},
 	)
