@@ -19,7 +19,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -28,11 +28,13 @@ import (
 
 	crdutil "github.com/openmcp-project/controller-utils/pkg/crds"
 	openmcpconstv1alpha1 "github.com/openmcp-project/openmcp-operator/api/constants"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	v1alpha1 "github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -40,8 +42,11 @@ import (
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
 	"github.com/openmcp-project/controller-utils/pkg/logging"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess"
+	"github.com/openmcp-project/openmcp-operator/lib/utils"
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+
+	"github.com/spf13/cobra"
 
 	"github.com/openmcp-project/service-provider-crossplane/api/crds"
 	"github.com/openmcp-project/service-provider-crossplane/internal/controller"
@@ -50,38 +55,112 @@ import (
 )
 
 var (
-	logger *logging.Logger
+	logger logging.Logger
 )
+
+func main() {
+	rootCmd := &cobra.Command{
+		Use:   "service-provider-crossplane",
+		Short: "Crossplane service provider",
+	}
+
+	// run command
+	runCmd := &cobra.Command{
+		Use:   "run",
+		Short: "Run the service-provider-crossplane",
+		RunE:  runCommand,
+	}
+	addCommonFlags(runCmd)
+	addMetricsFlags(runCmd)
+	addWebhookFlags(runCmd)
+	addManagerFlags(runCmd)
+
+	// init command
+	initCmd := &cobra.Command{
+		Use:   "init",
+		Short: "Initialize the service-provider-crossplane",
+		RunE:  initCommand,
+	}
+	addCommonFlags(initCmd)
+
+	rootCmd.AddCommand(runCmd, initCmd)
+
+	var err error
+	logger, err = logging.GetLogger()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to get logger: %v\n", err)
+		os.Exit(1)
+	}
+
+	ctrl.SetLogger(logger.Logr())
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func addCommonFlags(cmd *cobra.Command) {
+	cmd.Flags().String("provider-name", "", "The name of the provider.")
+	cmd.Flags().String("verbosity", "INFO", "The verbosity level of the provider.")
+	cmd.Flags().String("environment", "", "The logical environment the provider is running in.")
+}
+
+func addMetricsFlags(cmd *cobra.Command) {
+	cmd.Flags().String("metrics-bind-address", "0", "The address the metrics endpoint binds to. Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
+	cmd.Flags().Bool("metrics-secure", true, "If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
+	cmd.Flags().String("metrics-cert-path", "", "The directory that contains the metrics server certificate.")
+	cmd.Flags().String("metrics-cert-name", "tls.crt", "The name of the metrics server certificate file.")
+	cmd.Flags().String("metrics-cert-key", "tls.key", "The name of the metrics server key file.")
+}
+
+func addWebhookFlags(cmd *cobra.Command) {
+	cmd.Flags().String("webhook-cert-path", "", "The directory that contains the webhook certificate.")
+	cmd.Flags().String("webhook-cert-name", "tls.crt", "The name of the webhook certificate file.")
+	cmd.Flags().String("webhook-cert-key", "tls.key", "The name of the webhook key file.")
+}
+
+func addManagerFlags(cmd *cobra.Command) {
+	cmd.Flags().String("health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	cmd.Flags().Bool("leader-elect", false, "Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
+	cmd.Flags().Bool("enable-http2", false, "If set, HTTP/2 will be enabled for the metrics and webhook servers")
+}
 
 // initializePlatformCluster initializes the platform cluster with the necessary REST config and client.
 func initializePlatformCluster() (*clusters.Cluster, error) {
 	platformCluster := clusters.New("platform")
 
-	log, err := logging.GetLogger()
-	if err != nil {
-		logger.Error(err, "Failed to get logger")
-		os.Exit(1)
-	}
-	logger = &log
-	ctrl.SetLogger(log.Logr())
-
 	platformCluster = platformCluster.WithRESTConfig(ctrl.GetConfigOrDie())
 
 	if err := platformCluster.InitializeClient(scheme.Platform); err != nil {
-		logger.Error(err, "Failed to initialize client for platform cluster")
-		return nil, err
+		return nil, fmt.Errorf("failed to initialize client for platform cluster: %w", err)
 	}
 	return platformCluster, nil
 }
 
+func initCommand(cmd *cobra.Command, _ []string) error {
+	providerName, err := cmd.Flags().GetString("provider-name")
+	if err != nil {
+		return fmt.Errorf("required flag --provider-name not set")
+	}
+
+	platformCluster, err := initializePlatformCluster()
+	if err != nil {
+		logger.Error(err, "Failed to initialize platform cluster")
+		return err
+	}
+
+	runInit(platformCluster, providerName)
+	return nil
+}
+
 // runInit installs the necessary CRDs on each cluster
-func runInit(platformCluster *clusters.Cluster) {
+func runInit(platformCluster *clusters.Cluster, providerName string) {
 	ctx := context.Background()
 
 	logger.Info("Running init command")
 
 	clusterAccessManager := clusteraccess.NewClusterAccessManager(platformCluster.Client(), "crossplane.services.openmcp.cloud", os.Getenv("POD_NAMESPACE"))
-	clusterAccessManager.WithLogger(logger).
+	clusterAccessManager.WithLogger(&logger).
 		WithInterval(10 * time.Second).
 		WithTimeout(30 * time.Minute)
 
@@ -108,45 +187,37 @@ func runInit(platformCluster *clusters.Cluster) {
 	crdManager.AddCRDLabelToClusterMapping(clustersv1alpha1.PURPOSE_PLATFORM, platformCluster)
 	crdManager.AddCRDLabelToClusterMapping(clustersv1alpha1.PURPOSE_ONBOARDING, onboardingCluster)
 
-	if err := crdManager.CreateOrUpdateCRDs(ctx, logger); err != nil {
+	if err := crdManager.CreateOrUpdateCRDs(ctx, &logger); err != nil {
 		logger.Error(err, "Failed to create or update CRDs")
 	}
+
+	crossplaneGVK := metav1.GroupVersionKind{
+		Group:   v1alpha1.GroupVersion.Group,
+		Version: v1alpha1.GroupVersion.Version,
+		Kind:    "Crossplane",
+	}
+	logger.Info("Registering service-provider-crossplane GVKs at the ServiceProvider object")
+	if err := utils.RegisterGVKsAtServiceProvider(ctx, platformCluster.Client(), providerName, crossplaneGVK); err != nil {
+		logger.Error(err, "Failed to register service provider GVKs")
+	}
+
 }
 
 // nolint:gocyclo
-func main() {
-	var metricsAddr string
-	var metricsCertPath, metricsCertName, metricsCertKey string
-	var webhookCertPath, webhookCertName, webhookCertKey string
-	var enableLeaderElection bool
-	var probeAddr string
-	var secureMetrics bool
-	var enableHTTP2 bool
-	var tlsOpts []func(*tls.Config)
-	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
-		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-	flag.BoolVar(&secureMetrics, "metrics-secure", true,
-		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
-	flag.StringVar(&webhookCertPath, "webhook-cert-path", "", "The directory that contains the webhook certificate.")
-	flag.StringVar(&webhookCertName, "webhook-cert-name", "tls.crt", "The name of the webhook certificate file.")
-	flag.StringVar(&webhookCertKey, "webhook-cert-key", "tls.key", "The name of the webhook key file.")
-	flag.StringVar(&metricsCertPath, "metrics-cert-path", "",
-		"The directory that contains the metrics server certificate.")
-	flag.StringVar(&metricsCertName, "metrics-cert-name", "tls.crt", "The name of the metrics server certificate file.")
-	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
-	flag.BoolVar(&enableHTTP2, "enable-http2", false,
-		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
+func runCommand(cmd *cobra.Command, _ []string) error {
+	metricsAddr, _ := cmd.Flags().GetString("metrics-bind-address")
+	metricsCertPath, _ := cmd.Flags().GetString("metrics-cert-path")
+	metricsCertName, _ := cmd.Flags().GetString("metrics-cert-name")
+	metricsCertKey, _ := cmd.Flags().GetString("metrics-cert-key")
+	webhookCertPath, _ := cmd.Flags().GetString("webhook-cert-path")
+	webhookCertName, _ := cmd.Flags().GetString("webhook-cert-name")
+	webhookCertKey, _ := cmd.Flags().GetString("webhook-cert-key")
+	enableLeaderElection, _ := cmd.Flags().GetBool("leader-elect")
+	probeAddr, _ := cmd.Flags().GetString("health-probe-bind-address")
+	secureMetrics, _ := cmd.Flags().GetBool("metrics-secure")
+	enableHTTP2, _ := cmd.Flags().GetBool("enable-http2")
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	var tlsOpts []func(*tls.Config)
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -171,19 +242,13 @@ func main() {
 
 	platformCluster, err := initializePlatformCluster()
 	if err != nil {
-		logger.Error(err, "Failed to initialize platform cluster")
-		os.Exit(1)
-	}
-
-	if os.Args[1] == "init" {
-		runInit(platformCluster)
-		return
+		return err
 	}
 
 	ctx := context.Background()
 
 	clusterAccessManager := clusteraccess.NewClusterAccessManager(platformCluster.Client(), "crossplane.services.openmcp.cloud", os.Getenv("POD_NAMESPACE"))
-	clusterAccessManager.WithLogger(logger).
+	clusterAccessManager.WithLogger(&logger).
 		WithInterval(10 * time.Second).
 		WithTimeout(30 * time.Minute)
 
@@ -215,8 +280,7 @@ func main() {
 			filepath.Join(webhookCertPath, webhookCertKey),
 		)
 		if err != nil {
-			logger.Error(err, "Failed to initialize webhook certificate watcher")
-			os.Exit(1)
+			return fmt.Errorf("failed to initialize webhook certificate watcher: %w", err)
 		}
 
 		webhookTLSOpts = append(webhookTLSOpts, func(config *tls.Config) {
@@ -264,8 +328,7 @@ func main() {
 			filepath.Join(metricsCertPath, metricsCertKey),
 		)
 		if err != nil {
-			logger.Error(err, "to initialize metrics certificate watcher", "error", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to initialize metrics certificate watcher: %w", err)
 		}
 
 		metricsServerOptions.TLSOpts = append(metricsServerOptions.TLSOpts, func(config *tls.Config) {
@@ -289,18 +352,13 @@ func main() {
 		// In the default scaffold provided, the program ends immediately after
 		// the manager stops, so would be fine to enable this option. However,
 		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		// LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
-		logger.Error(err, "unable to start manager")
-		os.Exit(1)
+		return fmt.Errorf("unable to start manager: %w", err)
 	}
 
-	err = mgr.Add(platformCluster.Cluster())
-	if err != nil {
-		logger.Error(err, "unable to add platform cluster to manager")
-		os.Exit(1)
+	if err = mgr.Add(platformCluster.Cluster()); err != nil {
+		return fmt.Errorf("unable to add platform cluster to manager: %w", err)
 	}
 
 	if err := (&controller.CrossplaneReconciler{
@@ -308,46 +366,40 @@ func main() {
 		OnboardingCluster: onboardingCluster,
 		Recorder:          mgr.GetEventRecorderFor("sp-crossplane-controller"),
 	}).SetupWithManager(mgr); err != nil {
-		logger.Error(err, "unable to create controller", "controller", "Crossplane")
-		os.Exit(1)
+		return fmt.Errorf("unable to create controller Crossplane: %w", err)
 	}
 	if err := (&controller.ProviderConfigReconciler{
 		PlatformCluster:   platformCluster,
 		OnboardingCluster: onboardingCluster,
 	}).SetupWithManager(mgr); err != nil {
-		logger.Error(err, "unable to create controller", "controller", "ProviderConfig")
-		os.Exit(1)
+		return fmt.Errorf("unable to create controller ProviderConfig: %w", err)
 	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {
 		logger.Info("Adding metrics certificate watcher to manager")
 		if err := mgr.Add(metricsCertWatcher); err != nil {
-			logger.Error(err, "unable to add metrics certificate watcher to manager")
-			os.Exit(1)
+			return fmt.Errorf("unable to add metrics certificate watcher to manager: %w", err)
 		}
 	}
 
 	if webhookCertWatcher != nil {
 		logger.Info("Adding webhook certificate watcher to manager")
 		if err := mgr.Add(webhookCertWatcher); err != nil {
-			logger.Error(err, "unable to add webhook certificate watcher to manager")
-			os.Exit(1)
+			return fmt.Errorf("unable to add webhook certificate watcher to manager: %w", err)
 		}
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		logger.Error(err, "unable to set up health check")
-		os.Exit(1)
+		return fmt.Errorf("unable to set up health check: %w", err)
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		logger.Error(err, "unable to set up ready check")
-		os.Exit(1)
+		return fmt.Errorf("unable to set up ready check: %w", err)
 	}
 
 	logger.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		logger.Error(err, "problem running manager")
-		os.Exit(1)
+		return fmt.Errorf("problem running manager: %w", err)
 	}
+	return nil
 }
