@@ -70,7 +70,9 @@ func main() {
 		Short: "Run the service-provider-crossplane",
 		RunE:  runCommand,
 	}
+	// add common flags to run command
 	addCommonFlags(runCmd)
+	// add specific flags to run command
 	addMetricsFlags(runCmd)
 	addWebhookFlags(runCmd)
 	addManagerFlags(runCmd)
@@ -81,6 +83,7 @@ func main() {
 		Short: "Initialize the service-provider-crossplane",
 		RunE:  initCommand,
 	}
+	// add common flags to init command
 	addCommonFlags(initCmd)
 
 	rootCmd.AddCommand(runCmd, initCmd)
