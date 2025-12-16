@@ -109,7 +109,27 @@ spec:
 ```
 
 ## 📚 Documentation
-More documentation for the service-provider-crossplane can be found in the [docs](./docs) folder.
+Extensive documentation for the service-provider-crossplane can be found in the [docs](./docs) folder.
+
+### Command line options
+To get help for available command line options, run:
+
+```bash
+go run cmd/service-provider-crossplane/main.go help
+```
+
+Service Providers have two main commands: `run` and `init`.
+`init` is used to initialize the service provider (e.g. install CRDs at Onboarding API).
+`run` is used to start the service provider controller manager.
+
+You can get help for each command individually for what command line arguments you can pass in, e.g.:
+```bash
+go run cmd/service-provider-crossplane/main.go init --help
+```
+
+```bash
+go run cmd/service-provider-crossplane/main.go run --help
+```
 
 ## 🧑‍💻 Development
 
@@ -142,6 +162,13 @@ To generate the CRDs, DeepCopy functions, and other boilerplate code, you can us
 
 ```bash
 task generate
+```
+
+### Validate the generated code and formatting
+To validate the generated code and formatting, you can use the following command:
+
+```bash
+task validate
 ```
 
 ## ❤️ Support, Feedback, Contributing
