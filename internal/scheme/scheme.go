@@ -7,6 +7,7 @@ import (
 	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	providersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -32,6 +33,7 @@ func initPlatform() {
 	utilruntime.Must(v1alpha1.AddToScheme(Platform))
 	utilruntime.Must(clustersv1alpha1.AddToScheme(Platform))
 	utilruntime.Must(apiextv1.AddToScheme(Platform))
+	utilruntime.Must(providersv1alpha1.AddToScheme(Platform))
 
 	// Flux CD
 	utilruntime.Must(helmv2.AddToScheme(Platform))
