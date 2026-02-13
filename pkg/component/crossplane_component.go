@@ -75,6 +75,13 @@ func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAd
 	}
 	ociURL := utils.AddOCIPrefix(url)
 
+	var secretRef *meta.LocalObjectReference
+	if c.ChartPullSecretName != "" {
+		secretRef = &meta.LocalObjectReference{
+			Name: c.ChartPullSecretName,
+		}
+	}
+
 	repo := &sourcev1.OCIRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      strings.ToLower(ComponentNameCrossplane),
@@ -85,10 +92,8 @@ func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAd
 			Reference: &sourcev1.OCIRepositoryRef{
 				Tag: tag,
 			},
-			Timeout: &metav1.Duration{Duration: 1 * time.Minute},
-			SecretRef: &meta.LocalObjectReference{
-				Name: c.ChartPullSecretName,
-			},
+			Timeout:   &metav1.Duration{Duration: 1 * time.Minute},
+			SecretRef: secretRef,
 		},
 	}
 
