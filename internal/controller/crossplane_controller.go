@@ -37,7 +37,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
@@ -78,6 +81,7 @@ type CrossplaneReconciler struct {
 	ClusterAccessReconciler clusteraccess.Reconciler
 	Recorder                record.EventRecorder
 	RequeueStore            *smartrequeue.Store
+	RecieveEventsChannel    <-chan event.GenericEvent
 }
 
 // Reconcile reconciles the Crossplane instance.
@@ -86,7 +90,6 @@ type CrossplaneReconciler struct {
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=crossplanes/finalizers,verbs=update
 func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-
 	// Fetch the Crossplane instance from the onboarding cluster
 	crossplane := &v1alpha1.Crossplane{}
 	if err := r.OnboardingCluster.Client().Get(ctx, req.NamespacedName, crossplane); err != nil {
@@ -100,7 +103,7 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	requeueEntry := r.RequeueStore.For(crossplane)
 	ctx = smartrequeue.NewContext(ctx, requeueEntry)
 
-	log.Info("Reconciling Crossplane", "name", crossplane.Name, "namespace", crossplane.Namespace)
+	log.Info("Reconciling Crossplane")
 
 	// Get ProviderConfig from Platform cluster
 	pc := &v1alpha1.ProviderConfig{}
@@ -589,6 +592,7 @@ func (r *CrossplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Crossplane{}).
+		WatchesRawSource(source.Channel(r.RecieveEventsChannel, &handler.EnqueueRequestForObject{})).
 		Complete(r)
 }
 

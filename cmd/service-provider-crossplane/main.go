@@ -34,6 +34,7 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -364,19 +365,28 @@ func runCommand(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("unable to add platform cluster to manager: %w", err)
 	}
 
-	if err := (&controller.CrossplaneReconciler{
-		PlatformCluster:   platformCluster,
-		OnboardingCluster: onboardingCluster,
-		Recorder:          mgr.GetEventRecorderFor("sp-crossplane-controller"),
-	}).SetupWithManager(mgr); err != nil {
+	// Create a buffered channel for events between reconcilers
+	reconcileEventsCh := make(chan event.GenericEvent, 128)
+
+	crossplaneReconciler := &controller.CrossplaneReconciler{
+		PlatformCluster:      platformCluster,
+		OnboardingCluster:    onboardingCluster,
+		Recorder:             mgr.GetEventRecorderFor("sp-crossplane-controller"),
+		RecieveEventsChannel: reconcileEventsCh,
+	}
+	if err := crossplaneReconciler.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create controller Crossplane: %w", err)
 	}
-	if err := (&controller.ProviderConfigReconciler{
+
+	providerConfigReconciler := &controller.ProviderConfigReconciler{
 		PlatformCluster:   platformCluster,
 		OnboardingCluster: onboardingCluster,
-	}).SetupWithManager(mgr); err != nil {
-		return fmt.Errorf("unable to create controller ProviderConfig: %w", err)
+		SendEventsChannel: reconcileEventsCh,
 	}
+	if err := providerConfigReconciler.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to create controller Provider: %w", err)
+	}
+
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {
