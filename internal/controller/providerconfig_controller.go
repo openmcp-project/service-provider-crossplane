@@ -18,8 +18,10 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -33,25 +35,39 @@ import (
 type ProviderConfigReconciler struct {
 	PlatformCluster   *clusters.Cluster
 	OnboardingCluster *clusters.Cluster
+	SendEventsChannel chan<- event.GenericEvent
 }
 
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=providerconfigs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=providerconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=providerconfigs/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the ProviderConfig object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
+// Reconcile reconciles the ProviderConfig instance. It listens for changes to ProviderConfig resources and triggers reconciliation for all Crossplane resources when a change is detected.
 func (r *ProviderConfigReconciler) Reconcile(ctx context.Context, _ ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	log := log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	crossplanesList := &v1alpha1.CrossplaneList{}
+	if err := r.OnboardingCluster.Client().List(ctx, crossplanesList); err != nil {
+		log.Error(err, "failed to list Crossplane resources")
+		return ctrl.Result{}, err
+	}
+
+	log.Info("ProviderConfig changed, triggering reconciliation for Crossplane resources")
+
+	for _, crossplane := range crossplanesList.Items {
+		genericEvent := event.GenericEvent{
+			Object: crossplane.DeepCopy(),
+		}
+
+		select {
+		case r.SendEventsChannel <- genericEvent:
+			log.Info("Sent Crossplane event to channel", "name", crossplane.Name, "namespace", crossplane.Namespace)
+
+		// we don't block when the channel is full.
+		case <-time.After(1 * time.Second):
+			log.Info("Channel send timeout, dropping event", "name", crossplane.Name, "namespace", crossplane.Namespace)
+		}
+	}
 
 	return ctrl.Result{}, nil
 }
