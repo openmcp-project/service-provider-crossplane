@@ -20,6 +20,7 @@ import (
 	"github.com/openmcp-project/controller-utils/pkg/image"
 
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
+	"github.com/openmcp-project/service-provider-crossplane/pkg/crossplane"
 	"github.com/openmcp-project/service-provider-crossplane/pkg/utils"
 
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
@@ -183,7 +184,7 @@ func (c *Crossplane) applyDefaultValues(rfn v1beta1.VersionResolverFn) error {
 
 	if c.CABundleRef != nil {
 		values["registryCaBundleConfig"] = map[string]any{
-			"name": c.CABundleRef.Name,
+			"name": crossplane.CABundleConfigMapName,
 			"key":  c.CABundleRef.Key,
 		}
 	}

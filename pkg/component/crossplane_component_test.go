@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
@@ -15,6 +16,7 @@ func Test_Crossplane(t *testing.T) {
 		desc                 string
 		config               *v1alpha1.CrossplaneSpec
 		configValues         *apiextensionsv1.JSON
+		caBundleRef          *corev1.ConfigMapKeySelector
 		imagePullSecretNames []string
 		enabled              bool
 		versionResolver      v1beta1.VersionResolverFn
@@ -69,6 +71,43 @@ func Test_Crossplane(t *testing.T) {
 				),
 			},
 		},
+		{
+			desc: "should be enabled with CA bundle",
+			config: &v1alpha1.CrossplaneSpec{
+				Version: "1.2.3",
+			},
+			configValues: &apiextensionsv1.JSON{Raw: []byte(`{"replicas":2}`)},
+			caBundleRef: &corev1.ConfigMapKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "some-configmap-name",
+				},
+				Key: "ca.crt",
+			},
+			imagePullSecretNames: []string{"secret-1", "secret-2"},
+			enabled:              true,
+			versionResolver:      fakeVersionResolver(false),
+			validationFuncs: []validationFunc{
+				hasName("Crossplane"),
+				isEnabled(true),
+				isAllowed(true),
+				hasPreUninstallHook(),
+				hasDependencies(0),
+				isTargetComponent(
+					hasNamespace(CrossplaneNamespace),
+				),
+				isFluxComponent(
+					returnsOCIRepository(),
+					returnsHelmRelease(
+						hasKubeconfigRef(),
+						hasHelmValue(2, "replicas"), // custom value
+						hasHelmValue("secret-1", "imagePullSecrets", "0"),
+						hasHelmValue("secret-2", "imagePullSecrets", "1"),
+						hasHelmValue("custom-ca-bundle", "registryCaBundleConfig", "name"),
+						hasHelmValue("ca.crt", "registryCaBundleConfig", "key"),
+					),
+				),
+			},
+		},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
@@ -76,6 +115,7 @@ func Test_Crossplane(t *testing.T) {
 			c := &Crossplane{
 				Config:               tC.config,
 				Values:               tC.configValues,
+				CABundleRef:          tC.caBundleRef,
 				ChartPullSecretName:  "chart-pull-secret",
 				ImagePullSecretNames: tC.imagePullSecretNames,
 				Enabled:              tC.enabled,
