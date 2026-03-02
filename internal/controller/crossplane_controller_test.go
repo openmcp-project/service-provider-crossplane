@@ -22,10 +22,13 @@ import (
 	"reflect"
 	"testing"
 
+	crossplanev1beta1 "github.com/crossplane/crossplane/apis/pkg/v1beta1"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
@@ -215,6 +218,15 @@ func Test_buildComponents(t *testing.T) {
 					Enabled: true,
 					Config:  &v1alpha1.CrossplaneProviderConfig{Name: "provider-1", Version: "v0.1.0"},
 				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
+					Config: &crossplanev1beta1.DeploymentRuntimeConfig{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "default",
+						},
+						Spec: crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+					},
+				},
 			},
 			wantErr: nil,
 		},
@@ -293,6 +305,15 @@ func Test_buildComponents(t *testing.T) {
 					Target:       client.ObjectKey{Name: "other-provider-image-secret", Namespace: component.CrossplaneNamespace},
 					Enabled:      true,
 				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
+					Config: &crossplanev1beta1.DeploymentRuntimeConfig{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "default",
+						},
+						Spec: crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+					},
+				},
 			},
 			wantErr: nil,
 		},
@@ -361,6 +382,15 @@ func Test_buildComponents(t *testing.T) {
 					Source:       client.ObjectKey{Name: "image-secret", Namespace: "pod-namespace"},
 					Target:       client.ObjectKey{Name: "image-secret", Namespace: component.CrossplaneNamespace},
 					Enabled:      true,
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
+					Config: &crossplanev1beta1.DeploymentRuntimeConfig{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "default",
+						},
+						Spec: crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+					},
 				},
 			},
 			wantErr: nil,
@@ -442,6 +472,137 @@ func Test_buildComponents(t *testing.T) {
 					Source:       client.ObjectKey{Name: "other-provider-image-secret", Namespace: "pod-namespace"},
 					Target:       client.ObjectKey{Name: "other-provider-image-secret", Namespace: component.CrossplaneNamespace},
 					Enabled:      false,
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: false,
+					Config: &crossplanev1beta1.DeploymentRuntimeConfig{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "default",
+						},
+						Spec: crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "Crossplane with custom CA bundle components are built and enabled",
+			args: args{
+				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
+				client:          nil,
+				setPodNamespace: true,
+				xp: &v1alpha1.Crossplane{
+					Spec: v1alpha1.CrossplaneSpec{
+						Version:   "v1.0.0",
+						Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
+					},
+				},
+				pc: &v1alpha1.ProviderConfig{
+					Spec: v1alpha1.ProviderConfigSpec{
+						CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+							{
+								Version: "v1.0.0",
+								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							},
+						},
+						Providers: v1alpha1.CrossplaneProviders{
+							AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
+								{Name: "provider-1", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws:v0.1.0"},
+							},
+						},
+						CABundleRef: &corev1.ConfigMapKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "my-ca-bundle",
+							},
+							Key: "ca-bundle.crt",
+						},
+					},
+				},
+				enabled: true,
+			},
+			want: []juggler.Component{
+				&component.Crossplane{
+					Enabled: true,
+					Config: &v1alpha1.CrossplaneSpec{
+						Version:   "v1.0.0",
+						Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
+					},
+					CABundleRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "my-ca-bundle",
+						},
+						Key: "ca-bundle.crt",
+					},
+				},
+				&component.CrossplaneProvider{
+					Enabled: true,
+					Config:  &v1alpha1.CrossplaneProviderConfig{Name: "provider-1", Version: "v0.1.0"},
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
+					Config: &crossplanev1beta1.DeploymentRuntimeConfig{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "default",
+						},
+						Spec: crossplanev1beta1.DeploymentRuntimeConfigSpec{
+							DeploymentTemplate: &crossplanev1beta1.DeploymentTemplate{
+								Spec: &appsv1.DeploymentSpec{
+									Selector: &metav1.LabelSelector{},
+									Template: corev1.PodTemplateSpec{
+										Spec: corev1.PodSpec{
+											Containers: []corev1.Container{
+												{
+													Name: "package-runtime",
+													VolumeMounts: []corev1.VolumeMount{
+														{
+															MountPath: "/etc/custom-ca",
+															Name:      "custom-ca-bundle",
+															ReadOnly:  true,
+														},
+													},
+													Env: []corev1.EnvVar{
+														{
+															Name:  "SSL_CERT_FILE",
+															Value: "/etc/custom-ca/ca-bundle.crt",
+														},
+														{
+															Name:  "SSL_CERT_DIR",
+															Value: "/etc/custom-ca",
+														},
+													},
+												},
+											},
+											Volumes: []corev1.Volume{
+												{
+													Name: "custom-ca-bundle",
+													VolumeSource: corev1.VolumeSource{
+														ConfigMap: &corev1.ConfigMapVolumeSource{
+															LocalObjectReference: corev1.LocalObjectReference{
+																Name: "custom-ca-bundle",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				&component.ConfigMap{
+					Enabled:      true,
+					SourceClient: nil,
+					Source: client.ObjectKey{
+						Name:      "my-ca-bundle",
+						Namespace: "pod-namespace",
+					},
+					Target: client.ObjectKey{
+						Name:      "custom-ca-bundle",
+						Namespace: "crossplane-system",
+					},
 				},
 			},
 			wantErr: nil,
