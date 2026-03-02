@@ -78,20 +78,24 @@ func Test_DeploymentRuntimeConfig(t *testing.T) {
 						hasFilterCriteria(2),
 						canConvert(&crossplanev1beta1.DeploymentRuntimeConfigList{Items: []crossplanev1beta1.DeploymentRuntimeConfig{*deploymentRuntimeConfigA}}, 1),
 						canCheckSame(
-							&DeploymentRuntimeConfig{Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-								ObjectMeta: metav1.ObjectMeta{Name: deploymentRuntimeConfigA.Name},
-							}},
-							&DeploymentRuntimeConfig{Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-								ObjectMeta: metav1.ObjectMeta{Name: deploymentRuntimeConfigA.Name},
-							}},
+							&DeploymentRuntimeConfig{
+								Name:   deploymentRuntimeConfigA.Name,
+								Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+							},
+							&DeploymentRuntimeConfig{
+								Name:   deploymentRuntimeConfigA.Name,
+								Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+							},
 							true),
 						canCheckSame(
-							&DeploymentRuntimeConfig{Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-								ObjectMeta: metav1.ObjectMeta{Name: deploymentRuntimeConfigA.Name},
-							}},
-							&DeploymentRuntimeConfig{Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-								ObjectMeta: metav1.ObjectMeta{Name: deploymentRuntimeConfigB.Name},
-							}},
+							&DeploymentRuntimeConfig{
+								Name:   deploymentRuntimeConfigA.Name,
+								Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+							},
+							&DeploymentRuntimeConfig{
+								Name:   deploymentRuntimeConfigB.Name,
+								Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+							},
 							false),
 					),
 				),
@@ -125,20 +129,24 @@ func Test_DeploymentRuntimeConfig(t *testing.T) {
 						hasFilterCriteria(2),
 						canConvert(&crossplanev1beta1.DeploymentRuntimeConfigList{Items: []crossplanev1beta1.DeploymentRuntimeConfig{*deploymentRuntimeConfigA}}, 1),
 						canCheckSame(
-							&DeploymentRuntimeConfig{Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-								ObjectMeta: metav1.ObjectMeta{Name: deploymentRuntimeConfigA.Name},
-							}},
-							&DeploymentRuntimeConfig{Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-								ObjectMeta: metav1.ObjectMeta{Name: deploymentRuntimeConfigA.Name},
-							}},
+							&DeploymentRuntimeConfig{
+								Name:   deploymentRuntimeConfigA.Name,
+								Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+							},
+							&DeploymentRuntimeConfig{
+								Name:   deploymentRuntimeConfigA.Name,
+								Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+							},
 							true),
 						canCheckSame(
-							&DeploymentRuntimeConfig{Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-								ObjectMeta: metav1.ObjectMeta{Name: deploymentRuntimeConfigA.Name},
-							}},
-							&DeploymentRuntimeConfig{Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-								ObjectMeta: metav1.ObjectMeta{Name: deploymentRuntimeConfigB.Name},
-							}},
+							&DeploymentRuntimeConfig{
+								Name:   deploymentRuntimeConfigA.Name,
+								Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+							},
+							&DeploymentRuntimeConfig{
+								Name:   deploymentRuntimeConfigB.Name,
+								Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+							},
 							false),
 					),
 				),
@@ -148,7 +156,7 @@ func Test_DeploymentRuntimeConfig(t *testing.T) {
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
 			ctx := newContext(fakeVersionResolver(false))
-			c := &DeploymentRuntimeConfig{Config: tC.config, Enabled: tC.enabled}
+			c := &DeploymentRuntimeConfig{Name: tC.config.Name, Config: &tC.config.Spec, Enabled: tC.enabled}
 			for _, vfn := range tC.validationFuncs {
 				vfn(t, ctx, c)
 			}

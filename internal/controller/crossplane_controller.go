@@ -437,12 +437,8 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 	// DeploymentRuntimeConfig "default" needs to exist even if config for custom CA is removed later.
 	drc := &component.DeploymentRuntimeConfig{
 		Enabled: xpComp.IsEnabled(),
-		Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-			Spec: crossplanev1beta1.DeploymentRuntimeConfigSpec{}, // empty by default
-		},
+		Name:    "default",
+		Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{}, // empty by default,
 	}
 	comps = append(comps, drc)
 
@@ -469,7 +465,7 @@ func configureDRCForCustomCA(client client.Client, podNs string, drc *component.
 		}
 		comps = append(comps, cm)
 
-		drc.Config.Spec.DeploymentTemplate = crossplane.GetDeploymentTemplateForCABundleRef(&corev1.ConfigMapKeySelector{
+		drc.Config.DeploymentTemplate = crossplane.GetDeploymentTemplateForCABundleRef(&corev1.ConfigMapKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{
 				Name: crossplane.CABundleConfigMapName, // ConfigMap is always renamed to constant value
 			},

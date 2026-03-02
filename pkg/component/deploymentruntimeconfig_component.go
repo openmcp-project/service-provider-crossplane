@@ -23,7 +23,8 @@ var _ components.TargetComponent = &DeploymentRuntimeConfig{}
 
 // DeploymentRuntimeConfig represents a Crossplane DeploymentRuntimeConfig configuration.
 type DeploymentRuntimeConfig struct {
-	Config  *crossplanev1beta1.DeploymentRuntimeConfig
+	Name    string
+	Config  *crossplanev1beta1.DeploymentRuntimeConfigSpec
 	Enabled bool
 }
 
@@ -31,7 +32,7 @@ type DeploymentRuntimeConfig struct {
 func (d *DeploymentRuntimeConfig) BuildObjectToReconcile(_ context.Context) (client.Object, types.NamespacedName, error) {
 	obj := &crossplanev1beta1.DeploymentRuntimeConfig{}
 	key := types.NamespacedName{
-		Name: d.Config.Name,
+		Name: d.Name,
 	}
 	return obj, key, nil
 }
@@ -41,7 +42,7 @@ func (d *DeploymentRuntimeConfig) ReconcileObject(_ context.Context, obj client.
 	drc := obj.(*crossplanev1beta1.DeploymentRuntimeConfig)
 	utils.SetManagedBy(drc)
 
-	drc.Spec = d.Config.Spec
+	drc.Spec = *d.Config
 
 	return nil
 }
@@ -58,9 +59,10 @@ func (*DeploymentRuntimeConfig) OrphanDetectorContext() object.DetectorContext {
 			configs := []juggler.Component{}
 			for _, config := range (list.(*crossplanev1beta1.DeploymentRuntimeConfigList)).Items {
 				// since we only need the name for the SameFunc, there is no need to copy the whole object
-				drc := &DeploymentRuntimeConfig{Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-					Spec: config.Spec,
-				}}
+				drc := &DeploymentRuntimeConfig{
+					Name:   config.Name,
+					Config: &config.Spec,
+				}
 				configs = append(configs, drc)
 			}
 			return configs
@@ -68,7 +70,7 @@ func (*DeploymentRuntimeConfig) OrphanDetectorContext() object.DetectorContext {
 		SameFunc: func(configured, detected juggler.Component) bool {
 			configuredDRC := configured.(*DeploymentRuntimeConfig)
 			detectedDRC := detected.(*DeploymentRuntimeConfig)
-			return configuredDRC.Config.Name == detectedDRC.Config.Name
+			return configuredDRC.Name == detectedDRC.Name
 		},
 	}
 }
@@ -96,7 +98,7 @@ func (d *DeploymentRuntimeConfig) IsInstallable(_ context.Context) (bool, error)
 
 // GetName implements Component.
 func (d *DeploymentRuntimeConfig) GetName() string {
-	return fmt.Sprintf("DeploymentRuntimeConfig%s", cases.Title(language.AmericanEnglish).String(d.Config.Name))
+	return fmt.Sprintf("DeploymentRuntimeConfig%s", cases.Title(language.AmericanEnglish).String(d.Name))
 }
 
 // GetDependencies implements Component.

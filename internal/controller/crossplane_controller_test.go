@@ -220,12 +220,8 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "default",
-						},
-						Spec: crossplanev1beta1.DeploymentRuntimeConfigSpec{},
-					},
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
 				},
 			},
 			wantErr: nil,
@@ -307,12 +303,8 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "default",
-						},
-						Spec: crossplanev1beta1.DeploymentRuntimeConfigSpec{},
-					},
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
 				},
 			},
 			wantErr: nil,
@@ -385,12 +377,8 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "default",
-						},
-						Spec: crossplanev1beta1.DeploymentRuntimeConfigSpec{},
-					},
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
 				},
 			},
 			wantErr: nil,
@@ -475,12 +463,8 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: false,
-					Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "default",
-						},
-						Spec: crossplanev1beta1.DeploymentRuntimeConfigSpec{},
-					},
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
 				},
 			},
 			wantErr: nil,
@@ -541,46 +525,42 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Config: &crossplanev1beta1.DeploymentRuntimeConfig{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "default",
-						},
-						Spec: crossplanev1beta1.DeploymentRuntimeConfigSpec{
-							DeploymentTemplate: &crossplanev1beta1.DeploymentTemplate{
-								Spec: &appsv1.DeploymentSpec{
-									Selector: &metav1.LabelSelector{},
-									Template: corev1.PodTemplateSpec{
-										Spec: corev1.PodSpec{
-											Containers: []corev1.Container{
-												{
-													Name: "package-runtime",
-													VolumeMounts: []corev1.VolumeMount{
-														{
-															MountPath: "/etc/custom-ca",
-															Name:      "custom-ca-bundle",
-															ReadOnly:  true,
-														},
+					Name:    "default",
+					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
+						DeploymentTemplate: &crossplanev1beta1.DeploymentTemplate{
+							Spec: &appsv1.DeploymentSpec{
+								Selector: &metav1.LabelSelector{},
+								Template: corev1.PodTemplateSpec{
+									Spec: corev1.PodSpec{
+										Containers: []corev1.Container{
+											{
+												Name: "package-runtime",
+												VolumeMounts: []corev1.VolumeMount{
+													{
+														MountPath: "/etc/custom-ca",
+														Name:      "custom-ca-bundle",
+														ReadOnly:  true,
 													},
-													Env: []corev1.EnvVar{
-														{
-															Name:  "SSL_CERT_FILE",
-															Value: "/etc/custom-ca/ca-bundle.crt",
-														},
-														{
-															Name:  "SSL_CERT_DIR",
-															Value: "/etc/custom-ca",
-														},
+												},
+												Env: []corev1.EnvVar{
+													{
+														Name:  "SSL_CERT_FILE",
+														Value: "/etc/custom-ca/ca-bundle.crt",
+													},
+													{
+														Name:  "SSL_CERT_DIR",
+														Value: "/etc/custom-ca",
 													},
 												},
 											},
-											Volumes: []corev1.Volume{
-												{
-													Name: "custom-ca-bundle",
-													VolumeSource: corev1.VolumeSource{
-														ConfigMap: &corev1.ConfigMapVolumeSource{
-															LocalObjectReference: corev1.LocalObjectReference{
-																Name: "custom-ca-bundle",
-															},
+										},
+										Volumes: []corev1.Volume{
+											{
+												Name: "custom-ca-bundle",
+												VolumeSource: corev1.VolumeSource{
+													ConfigMap: &corev1.ConfigMapVolumeSource{
+														LocalObjectReference: corev1.LocalObjectReference{
+															Name: "custom-ca-bundle",
 														},
 													},
 												},
