@@ -52,8 +52,11 @@ import (
 	v1alpha1 "github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 	"github.com/openmcp-project/service-provider-crossplane/internal/scheme"
 	"github.com/openmcp-project/service-provider-crossplane/pkg/component"
+	"github.com/openmcp-project/service-provider-crossplane/pkg/crossplane"
 	sputils "github.com/openmcp-project/service-provider-crossplane/pkg/utils"
 
+	crossplanev1beta1 "github.com/crossplane/crossplane/apis/pkg/v1beta1"
+	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/components"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/fluxcd"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/object"
@@ -376,6 +379,7 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 		Config:               &xp.Spec,
 		ChartPullSecretName:  xpHelmChartPullSecret.Name,
 		ImagePullSecretNames: extractSecretNames(xpContainerImagePullSecrets),
+		CABundleRef:          pc.Spec.CABundleRef,
 	}
 	comps = append(comps, xpComp)
 
@@ -429,7 +433,47 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 			comps = append(comps, xpp)
 		}
 	}
+
+	// DeploymentRuntimeConfig "default" needs to exist even if config for custom CA is removed later.
+	drc := &component.DeploymentRuntimeConfig{
+		Enabled: xpComp.IsEnabled(),
+		Name:    "default",
+		Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{}, // empty by default,
+	}
+	comps = append(comps, drc)
+
+	comps = append(comps, configureDRCForCustomCA(client, podNs, drc, pc, xpComp.IsEnabled())...)
+
 	return comps, nil
+}
+
+func configureDRCForCustomCA(client client.Client, podNs string, drc *component.DeploymentRuntimeConfig, pc *v1alpha1.ProviderConfig, enabled bool) []juggler.Component {
+	comps := []juggler.Component{}
+
+	if pc.Spec.CABundleRef != nil {
+		cm := &component.ConfigMap{
+			Enabled:      enabled,
+			SourceClient: client,
+			Source: types.NamespacedName{
+				Name:      pc.Spec.CABundleRef.Name,
+				Namespace: podNs,
+			},
+			Target: types.NamespacedName{
+				Name:      crossplane.CABundleConfigMapName, // ConfigMap is always renamed to constant value
+				Namespace: components.CrossplaneNamespace,
+			},
+		}
+		comps = append(comps, cm)
+
+		drc.Config.DeploymentTemplate = crossplane.GetDeploymentTemplateForCABundleRef(&corev1.ConfigMapKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: crossplane.CABundleConfigMapName, // ConfigMap is always renamed to constant value
+			},
+			Key: pc.Spec.CABundleRef.Key,
+		})
+	}
+
+	return comps
 }
 
 func appendDistinct(slice []juggler.Component, elems ...juggler.Component) []juggler.Component {
@@ -562,7 +606,9 @@ func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, log
 		WithLabelFunc(sputils.LabelFunc(sputils.LabelManagedByValue))
 	or.RegisterType(
 		&component.Secret{},
+		&component.ConfigMap{},
 		&component.CrossplaneProvider{},
+		&component.DeploymentRuntimeConfig{},
 	)
 	juggler.RegisterReconciler(or)
 

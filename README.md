@@ -111,6 +111,8 @@ spec:
 ## 📚 Documentation
 Extensive documentation for the service-provider-crossplane can be found in the [docs](./docs) folder.
 
+- [Custom CA Bundle Configuration](./docs/configuration/custom-ca.md) - How to configure custom Certificate Authority bundles for Crossplane instances and providers
+
 ### Command line options
 To get help for available command line options, run:
 

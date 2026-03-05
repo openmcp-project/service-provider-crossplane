@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -92,6 +93,11 @@ type ProviderConfigSpec struct {
 	// Providers holds the configuration for Crossplane providers that can be installed via the Service Provider Crossplane.
 	// +kubebuilder:validation:Optional
 	Providers CrossplaneProviders `json:"providers,omitempty"`
+
+	// CABundleRef is a reference to a config map containing certificate bundle.
+	// It will be installed on the ManagedControlPlane and configured for Crossplane runtime and providers.
+	// +kubebuilder:validation:Optional
+	CABundleRef *corev1.ConfigMapKeySelector `json:"caBundleRef,omitempty"`
 }
 
 // ProviderConfigStatus defines the observed state of ProviderConfig.

@@ -9,6 +9,7 @@ import (
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
 	"github.com/fluxcd/pkg/apis/meta"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -19,6 +20,7 @@ import (
 	"github.com/openmcp-project/controller-utils/pkg/image"
 
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
+	"github.com/openmcp-project/service-provider-crossplane/pkg/crossplane"
 	"github.com/openmcp-project/service-provider-crossplane/pkg/utils"
 
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
@@ -44,6 +46,7 @@ var _ components.TargetComponent = &Crossplane{}
 type Crossplane struct {
 	Config               *v1alpha1.CrossplaneSpec
 	Values               *apiextensionsv1.JSON `json:"values,omitempty"`
+	CABundleRef          *corev1.ConfigMapKeySelector
 	ChartPullSecretName  string
 	ImagePullSecretNames []string
 	Enabled              bool
@@ -177,6 +180,13 @@ func (c *Crossplane) applyDefaultValues(rfn v1beta1.VersionResolverFn) error {
 	values["image"] = map[string]any{
 		"repository": url,
 		"tag":        tag,
+	}
+
+	if c.CABundleRef != nil {
+		values["registryCaBundleConfig"] = map[string]any{
+			"name": crossplane.CABundleConfigMapName,
+			"key":  c.CABundleRef.Key,
+		}
 	}
 
 	// Write updated values
