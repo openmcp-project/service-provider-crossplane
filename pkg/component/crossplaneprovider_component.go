@@ -67,7 +67,7 @@ func (*CrossplaneProvider) OrphanDetectorContext() object.DetectorContext {
 			utils.HasComponentLabel(),
 		},
 		ConvertFunc: func(list client.ObjectList) []juggler.Component {
-			providers := []juggler.Component{}
+			providers := []juggler.Component{} //nolint:prealloc
 			for _, provider := range (list.(*crossplanev1.ProviderList)).Items {
 				// since we only need the name for the SameFunc, there is no need to copy the whole object
 				cp := &CrossplaneProvider{Config: &v1alpha1.CrossplaneProviderConfig{
