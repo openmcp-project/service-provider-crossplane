@@ -67,8 +67,12 @@ import (
 var (
 	errComponentRemaining = errors.New("at least one component is still installed")
 
-	// Finalizer for Crossplane instance resources
-	Finalizer = providersv1alpha1.GroupVersion.Group + "/finalizers"
+	// FinalizerLegacy is the legacy finalizer for Crossplane instance resources.
+	FinalizerLegacy = providersv1alpha1.GroupVersion.Group + "/finalizers"
+	// FinalizerComponents is the finalizer for resources managed by the Juggler.
+	FinalizerComponents = v1alpha1.GroupVersion.Group + "/components"
+	// FinalizerAccess is the finalizer for access requests.
+	FinalizerAccess = v1alpha1.GroupVersion.Group + "/mcp-access"
 
 	controllerName = v1alpha1.GroupVersion.Group
 )
@@ -120,13 +124,14 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return requeueEntry.Error(err)
 	}
 
-	// Ensure finalizer is set
-	if err := r.ensureFinalizer(ctx, crossplane); err != nil {
-		return requeueEntry.Error(err)
+	// Check if object is in deletion and everything except for the access request
+	// has been cleaned up already.
+	if r.readyForCleanup(crossplane) {
+		return r.cleanupClusterAccess(ctx, req, crossplane)
 	}
 
 	// Setup cluster access
-	mcpCluster, result, err := r.setupClusterAccess(ctx, req)
+	mcpCluster, result, err := r.setupClusterAccess(ctx, req, crossplane)
 	if err != nil {
 		return requeueEntry.Error(err)
 	}
@@ -141,6 +146,17 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	return r.reconcileCrossplaneInstance(ctx, mcpCluster.Client(), crossplane, pc)
+}
+
+func inDeletion(obj client.Object) bool {
+	return !obj.GetDeletionTimestamp().IsZero()
+}
+
+// readyForCleanup checks if the Crossplane instance is in deletion and components have already been cleaned up successfully.
+func (r *CrossplaneReconciler) readyForCleanup(crossplane *v1alpha1.Crossplane) bool {
+	return inDeletion(crossplane) &&
+		!r.hasFinalizer(crossplane, FinalizerComponents) &&
+		!r.hasFinalizer(crossplane, FinalizerLegacy)
 }
 
 func (r *CrossplaneReconciler) updateStatus(ctx context.Context, crossplane *v1alpha1.Crossplane, newConditions *[]metav1.Condition) {
@@ -169,8 +185,17 @@ func (r *CrossplaneReconciler) setupReconciliationContext(ctx context.Context, r
 	return ctx, nil
 }
 
-func (r *CrossplaneReconciler) setupClusterAccess(ctx context.Context, req ctrl.Request) (*clusters.Cluster, *ctrl.Result, error) {
+func (r *CrossplaneReconciler) setupClusterAccess(ctx context.Context, req ctrl.Request, crossplane *v1alpha1.Crossplane) (*clusters.Cluster, *ctrl.Result, error) {
 	log := log.FromContext(ctx)
+
+	// Add access finalizer
+	if err := r.ensureFinalizer(ctx, crossplane, FinalizerAccess); err != nil {
+		return nil, nil, err
+	}
+	// Remove legacy finalizer
+	if err := r.removeFinalizer(ctx, crossplane, FinalizerLegacy); err != nil {
+		return nil, nil, err
+	}
 
 	// Create ClusterRequest/AccessRequest
 	res, err := r.ClusterAccessReconciler.Reconcile(ctx, req)
@@ -194,6 +219,29 @@ func (r *CrossplaneReconciler) setupClusterAccess(ctx context.Context, req ctrl.
 	}
 
 	return mcpCluster, nil, nil
+}
+
+func (r *CrossplaneReconciler) cleanupClusterAccess(ctx context.Context, req ctrl.Request, crossplane *v1alpha1.Crossplane) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
+
+	// Delete AccessRequest
+	res, err := r.ClusterAccessReconciler.ReconcileDelete(ctx, req)
+	if err != nil {
+		log.Error(err, "failed to delete cluster access for crossplane instance")
+		return ctrl.Result{}, err
+	}
+
+	// AccessRequest was marked for deletion but not gone yet
+	if res.RequeueAfter > 0 {
+		return res, nil
+	}
+
+	// Remove access finalizer
+	if err := r.removeFinalizer(ctx, crossplane, FinalizerAccess); err != nil {
+		log.Error(err, "failed to remove access finalizer")
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
 }
 
 func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl.Request) (context.Context, error) {
@@ -227,8 +275,17 @@ func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, 
 	requeueEntry := smartrequeue.FromContext(ctx)
 
 	// Handle deletion
-	if !xp.DeletionTimestamp.IsZero() {
+	if inDeletion(xp) {
 		return r.deleteCrossplaneInstance(ctx, mcpClient, xp, pc)
+	}
+
+	// Add components finalizer
+	if err := r.ensureFinalizer(ctx, xp, FinalizerComponents); err != nil {
+		return requeueEntry.Error(err)
+	}
+	// Remove legacy finalizer
+	if err := r.removeFinalizer(ctx, xp, FinalizerLegacy); err != nil {
+		return requeueEntry.Error(err)
 	}
 
 	conditions, err := r.createOrUpdateCrossplaneInstance(ctx, mcpClient, xp, pc)
@@ -252,9 +309,9 @@ func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, 
 func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) (ctrl.Result, error) {
 	requeueEntry := smartrequeue.FromContext(ctx)
 
-	if !r.hasFinalizer(xp) {
-		// No finalizer, nothing to do - delete completed
-		return requeueEntry.Never()
+	if !r.hasFinalizer(xp, FinalizerComponents) {
+		// No finalizer, nothing to do - Juggler components deleted already
+		return requeueEntry.Reset()
 	}
 
 	log := log.FromContext(ctx)
@@ -276,12 +333,13 @@ func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, mcp
 		return requeueEntry.Error(err)
 	}
 
-	if err := r.removeFinalizer(ctx, xp); err != nil {
+	// Remove components finalizer
+	if err := r.removeFinalizer(ctx, xp, FinalizerComponents); err != nil {
 		return requeueEntry.Error(err)
 	}
 
 	// Deletion completed successfully
-	return requeueEntry.Never()
+	return requeueEntry.Reset()
 }
 
 func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
@@ -705,22 +763,22 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 	}
 }
 
-func (r *CrossplaneReconciler) ensureFinalizer(ctx context.Context, object client.Object) error {
-	updated := controllerutil.AddFinalizer(object, Finalizer)
+func (r *CrossplaneReconciler) ensureFinalizer(ctx context.Context, object client.Object, finalizer string) error {
+	updated := controllerutil.AddFinalizer(object, finalizer)
 	if updated {
 		return r.OnboardingCluster.Client().Update(ctx, object)
 	}
 	return nil
 }
 
-func (r *CrossplaneReconciler) removeFinalizer(ctx context.Context, object client.Object) error {
-	updated := controllerutil.RemoveFinalizer(object, Finalizer)
+func (r *CrossplaneReconciler) removeFinalizer(ctx context.Context, object client.Object, finalizer string) error {
+	updated := controllerutil.RemoveFinalizer(object, finalizer)
 	if updated {
 		return r.OnboardingCluster.Client().Update(ctx, object)
 	}
 	return nil
 }
 
-func (r *CrossplaneReconciler) hasFinalizer(object client.Object) bool {
-	return controllerutil.ContainsFinalizer(object, Finalizer)
+func (r *CrossplaneReconciler) hasFinalizer(object client.Object, finalizer string) bool {
+	return controllerutil.ContainsFinalizer(object, finalizer)
 }
