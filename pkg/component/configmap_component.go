@@ -47,7 +47,7 @@ func (c *ConfigMap) OrphanDetectorContext() object.DetectorContext {
 			utils.HasComponentLabel(),
 		},
 		ConvertFunc: func(list client.ObjectList) []juggler.Component {
-			var configMaps []juggler.Component
+			var configMaps []juggler.Component //nolint:prealloc
 			for _, configMap := range (list.(*corev1.ConfigMapList)).Items {
 				configMaps = append(configMaps, &ConfigMap{Target: client.ObjectKeyFromObject(&configMap)})
 			}

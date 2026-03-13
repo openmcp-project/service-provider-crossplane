@@ -37,7 +37,7 @@ func (s *PlatformSecret) OrphanDetectorContext() object.DetectorContext {
 			utils.HasComponentLabel(),
 		},
 		ConvertFunc: func(list client.ObjectList) []juggler.Component {
-			var secrets []juggler.Component
+			var secrets []juggler.Component //nolint:prealloc
 			for _, secret := range (list.(*corev1.SecretList)).Items {
 				secrets = append(secrets, &PlatformSecret{Target: client.ObjectKeyFromObject(&secret)})
 			}
