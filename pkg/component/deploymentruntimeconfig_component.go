@@ -56,7 +56,7 @@ func (*DeploymentRuntimeConfig) OrphanDetectorContext() object.DetectorContext {
 			utils.HasComponentLabel(),
 		},
 		ConvertFunc: func(list client.ObjectList) []juggler.Component {
-			configs := []juggler.Component{}
+			configs := []juggler.Component{} //nolint:prealloc
 			for _, config := range (list.(*crossplanev1beta1.DeploymentRuntimeConfigList)).Items {
 				// since we only need the name for the SameFunc, there is no need to copy the whole object
 				drc := &DeploymentRuntimeConfig{
