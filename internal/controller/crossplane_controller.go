@@ -302,7 +302,20 @@ func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, 
 
 	r.updateStatus(ctx, xp, &newConditions)
 
-	// Successfully reconciled - reset the requeue backoff
+	// Check if all components are ready
+	allReady := true
+	for _, c := range newConditions {
+		if c.Status != metav1.ConditionTrue {
+			allReady = false
+			break
+		}
+	}
+
+	if allReady {
+		// All components healthy, monitor with exponential backoff
+		return requeueEntry.IsStable()
+	}
+	// Components still not ready, requeue soon
 	return requeueEntry.IsProgressing()
 }
 
