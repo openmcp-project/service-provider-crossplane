@@ -40,7 +40,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	controllerutil2 "github.com/openmcp-project/controller-utils/pkg/controller"
 
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
@@ -78,7 +81,8 @@ var (
 )
 
 const (
-	requestSuffixMCP = "--mcp"
+	requestSuffixMCP          = "--mcp"
+	defaultProviderConfigName = "default"
 )
 
 // CrossplaneReconciler reconciles a Crossplane object
@@ -89,6 +93,7 @@ type CrossplaneReconciler struct {
 	Recorder                record.EventRecorder
 	RequeueStore            *smartrequeue.Store
 	RecieveEventsChannel    <-chan event.GenericEvent
+	SecretsNamespace        string
 }
 
 // Reconcile reconciles the Crossplane instance.
@@ -114,7 +119,7 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Get ProviderConfig from Platform cluster
 	pc := &v1alpha1.ProviderConfig{}
-	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: "default"}, pc); err != nil {
+	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: defaultProviderConfigName}, pc); err != nil {
 		return requeueEntry.ReturnError(err)
 	}
 
@@ -710,7 +715,61 @@ func (r *CrossplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Crossplane{}).
 		WatchesRawSource(source.Channel(r.RecieveEventsChannel, &handler.EnqueueRequestForObject{})).
+		WatchesRawSource(source.Kind(
+			r.PlatformCluster.Cluster().GetCache(),
+			&corev1.Secret{},
+			handler.TypedEnqueueRequestsFromMapFunc(r.mapSecretToRequests),
+			controllerutil2.ToTypedPredicate[*corev1.Secret](
+				predicate.NewPredicateFuncs(func(obj client.Object) bool {
+					return obj.GetNamespace() == r.SecretsNamespace
+				}),
+			),
+		)).
 		Complete(r)
+}
+
+func (r *CrossplaneReconciler) mapSecretToRequests(ctx context.Context, secret *corev1.Secret) []ctrl.Request {
+	log := log.FromContext(ctx)
+
+	providerConfig := &v1alpha1.ProviderConfig{}
+	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: "default"}, providerConfig); err != nil {
+		log.Error(err, "failed to get ProviderConfig while mapping secret")
+		return nil
+	}
+
+	if !isSecretReferencedInProviderConfig(providerConfig, secret.Name) {
+		return nil
+	}
+
+	crossplanesList := &v1alpha1.CrossplaneList{}
+	if err := r.OnboardingCluster.Client().List(ctx, crossplanesList); err != nil {
+		log.Error(err, "failed to list Crossplane resources")
+		return nil
+	}
+
+	log.Info("Source secret changed, triggering reconciliation", "secret", secret.Name)
+
+	requests := make([]ctrl.Request, 0, len(crossplanesList.Items))
+	for _, crossplaneInstance := range crossplanesList.Items {
+		requests = append(requests, ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: crossplaneInstance.Name, Namespace: crossplaneInstance.Namespace},
+		})
+	}
+	return requests
+}
+
+func isSecretReferencedInProviderConfig(pc *v1alpha1.ProviderConfig, secretName string) bool {
+	for _, versions := range pc.Spec.CrossplaneVersions {
+		if versions.Chart.SecretRef.Name == secretName || versions.Image.SecretRef.Name == secretName {
+			return true
+		}
+	}
+	for _, pullSecret := range pc.Spec.Providers.ImagePullSecrets {
+		if pullSecret.Name == secretName {
+			return true
+		}
+	}
+	return false
 }
 
 func getMCPPermissions() []clustersv1alpha1.PermissionsRequest {
