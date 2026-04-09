@@ -25,13 +25,17 @@ import (
 	crossplanev1beta1 "github.com/crossplane/crossplane/apis/pkg/v1beta1"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
+	"github.com/openmcp-project/controller-utils/pkg/clusters"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
+	"github.com/openmcp-project/service-provider-crossplane/internal/scheme"
 	"github.com/openmcp-project/service-provider-crossplane/pkg/component"
 )
 
@@ -656,5 +660,355 @@ func Test_buildComponents(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func Test_isSecretReferencedInProviderConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		pc         *v1alpha1.ProviderConfig
+		secretName string
+		want       bool
+	}{
+		{
+			name: "matches chart pull secret",
+			pc: &v1alpha1.ProviderConfig{
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
+							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{},
+				},
+			},
+			secretName: "chart-secret",
+			want:       true,
+		},
+		{
+			name: "matches image pull secret",
+			pc: &v1alpha1.ProviderConfig{
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{},
+				},
+			},
+			secretName: "image-secret",
+			want:       true,
+		},
+		{
+			name: "matches provider image pull secret",
+			pc: &v1alpha1.ProviderConfig{
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{
+						ImagePullSecrets: []commonapi.LocalObjectReference{
+							{Name: "provider-pull-secret"},
+						},
+					},
+				},
+			},
+			secretName: "provider-pull-secret",
+			want:       true,
+		},
+		{
+			name: "matches secret in second version entry",
+			pc: &v1alpha1.ProviderConfig{
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+						},
+						{
+							Version: "v2.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "v2-chart-secret"}},
+							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/2"},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{},
+				},
+			},
+			secretName: "v2-chart-secret",
+			want:       true,
+		},
+		{
+			name: "does not match unrelated secret",
+			pc: &v1alpha1.ProviderConfig{
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
+							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{
+						ImagePullSecrets: []commonapi.LocalObjectReference{
+							{Name: "provider-pull-secret"},
+						},
+					},
+				},
+			},
+			secretName: "unrelated-secret",
+			want:       false,
+		},
+		{
+			name: "empty provider config - no secrets referenced",
+			pc: &v1alpha1.ProviderConfig{
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{},
+					Providers:          v1alpha1.CrossplaneProviders{},
+				},
+			},
+			secretName: "any-secret",
+			want:       false,
+		},
+		{
+			name: "empty secret refs - no match",
+			pc: &v1alpha1.ProviderConfig{
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{},
+				},
+			},
+			secretName: "some-secret",
+			want:       false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isSecretReferencedInProviderConfig(tt.pc, tt.secretName)
+			if got != tt.want {
+				t.Errorf("isSecretReferencedInProviderConfig() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_mapSecretToRequests(t *testing.T) {
+	tests := []struct {
+		name                string
+		secret              *corev1.Secret
+		providerConfig      *v1alpha1.ProviderConfig
+		crossplaneInstances []client.Object
+		wantRequests        []ctrl.Request
+	}{
+		{
+			name: "referenced secret triggers reconciliation for all Crossplane instances",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "chart-secret",
+					Namespace: "sp-namespace",
+				},
+			},
+			providerConfig: &v1alpha1.ProviderConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: defaultProviderConfigName,
+				},
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
+							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{},
+				},
+			},
+			crossplaneInstances: []client.Object{
+				&v1alpha1.Crossplane{
+					ObjectMeta: metav1.ObjectMeta{Name: "xp-1", Namespace: "ns-1"},
+				},
+				&v1alpha1.Crossplane{
+					ObjectMeta: metav1.ObjectMeta{Name: "xp-2", Namespace: "ns-2"},
+				},
+			},
+			wantRequests: []ctrl.Request{
+				{NamespacedName: client.ObjectKey{Name: "xp-1", Namespace: "ns-1"}},
+				{NamespacedName: client.ObjectKey{Name: "xp-2", Namespace: "ns-2"}},
+			},
+		},
+		{
+			name: "unreferenced secret returns no requests",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "unrelated-secret",
+					Namespace: "sp-namespace",
+				},
+			},
+			providerConfig: &v1alpha1.ProviderConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: defaultProviderConfigName,
+				},
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
+							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{},
+				},
+			},
+			crossplaneInstances: []client.Object{
+				&v1alpha1.Crossplane{
+					ObjectMeta: metav1.ObjectMeta{Name: "xp-1", Namespace: "ns-1"},
+				},
+			},
+			wantRequests: nil,
+		},
+		{
+			name: "referenced secret with no Crossplane instances returns empty",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "chart-secret",
+					Namespace: "sp-namespace",
+				},
+			},
+			providerConfig: &v1alpha1.ProviderConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: defaultProviderConfigName,
+				},
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
+							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{},
+				},
+			},
+			crossplaneInstances: nil,
+			wantRequests:        []ctrl.Request{},
+		},
+		{
+			name: "provider image pull secret triggers reconciliation",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "provider-pull-secret",
+					Namespace: "sp-namespace",
+				},
+			},
+			providerConfig: &v1alpha1.ProviderConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: defaultProviderConfigName,
+				},
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{
+						ImagePullSecrets: []commonapi.LocalObjectReference{
+							{Name: "provider-pull-secret"},
+						},
+					},
+				},
+			},
+			crossplaneInstances: []client.Object{
+				&v1alpha1.Crossplane{
+					ObjectMeta: metav1.ObjectMeta{Name: "xp-1", Namespace: "ns-1"},
+				},
+			},
+			wantRequests: []ctrl.Request{
+				{NamespacedName: client.ObjectKey{Name: "xp-1", Namespace: "ns-1"}},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build fake platform client with ProviderConfig
+			platformClient := fake.NewClientBuilder().
+				WithScheme(scheme.Platform).
+				WithObjects(tt.providerConfig).
+				Build()
+
+			// Build fake onboarding client with Crossplane instances
+			onboardingBuilder := fake.NewClientBuilder().
+				WithScheme(scheme.Onboarding)
+			if len(tt.crossplaneInstances) > 0 {
+				onboardingBuilder = onboardingBuilder.WithObjects(tt.crossplaneInstances...)
+			}
+			onboardingClient := onboardingBuilder.Build()
+
+			r := &CrossplaneReconciler{
+				PlatformCluster:   clusters.NewTestClusterFromClient("platform", platformClient),
+				OnboardingCluster: clusters.NewTestClusterFromClient("onboarding", onboardingClient),
+			}
+
+			got := r.mapSecretToRequests(context.Background(), tt.secret)
+
+			if tt.wantRequests == nil {
+				if got != nil {
+					t.Errorf("mapSecretToRequests() = %v, want nil", got)
+				}
+				return
+			}
+
+			if len(got) != len(tt.wantRequests) {
+				t.Fatalf("mapSecretToRequests() returned %d requests, want %d", len(got), len(tt.wantRequests))
+			}
+			for i, req := range got {
+				if req.NamespacedName != tt.wantRequests[i].NamespacedName {
+					t.Errorf("mapSecretToRequests()[%d] = %v, want %v", i, req.NamespacedName, tt.wantRequests[i].NamespacedName)
+				}
+			}
+		})
+	}
+}
+
+func Test_mapSecretToRequests_providerConfigNotFound(t *testing.T) {
+	// Platform client with no ProviderConfig — simulates it not existing
+	platformClient := fake.NewClientBuilder().
+		WithScheme(scheme.Platform).
+		Build()
+	onboardingClient := fake.NewClientBuilder().
+		WithScheme(scheme.Onboarding).
+		Build()
+
+	r := &CrossplaneReconciler{
+		PlatformCluster:   clusters.NewTestClusterFromClient("platform", platformClient),
+		OnboardingCluster: clusters.NewTestClusterFromClient("onboarding", onboardingClient),
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "some-secret",
+			Namespace: "sp-namespace",
+		},
+	}
+
+	got := r.mapSecretToRequests(context.Background(), secret)
+	if got != nil {
+		t.Errorf("mapSecretToRequests() = %v, want nil when ProviderConfig not found", got)
 	}
 }
