@@ -373,6 +373,7 @@ func runCommand(cmd *cobra.Command, _ []string) error {
 		OnboardingCluster:    onboardingCluster,
 		Recorder:             mgr.GetEventRecorderFor("sp-crossplane-controller"),
 		RecieveEventsChannel: reconcileEventsCh,
+		SecretsNamespace:     os.Getenv(openmcpconstv1alpha1.EnvVariablePodNamespace),
 	}
 	if err := crossplaneReconciler.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create controller Crossplane: %w", err)
