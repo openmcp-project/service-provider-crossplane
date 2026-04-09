@@ -732,7 +732,7 @@ func (r *CrossplaneReconciler) mapSecretToRequests(ctx context.Context, secret *
 	log := log.FromContext(ctx)
 
 	providerConfig := &v1alpha1.ProviderConfig{}
-	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: "default"}, providerConfig); err != nil {
+	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: defaultProviderConfigName}, providerConfig); err != nil {
 		log.Error(err, "failed to get ProviderConfig while mapping secret")
 		return nil
 	}
