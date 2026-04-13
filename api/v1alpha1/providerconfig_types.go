@@ -82,8 +82,9 @@ type CrossplaneVersion struct {
 	Chart ChartSpec `json:"chart"`
 
 	// Image holds the Crossplane controller image information for this Crossplane version.
-	// +kubebuilder:validation:Required
-	Image ImageSpec `json:"image"`
+	// If not specified, the default image configured in the Helm chart will be used.
+	// +kubebuilder:validation:Optional
+	Image *ImageSpec `json:"image,omitempty"`
 }
 
 // ProviderConfigSpec defines the desired state of ProviderConfig.

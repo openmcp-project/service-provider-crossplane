@@ -154,8 +154,9 @@ spec:
                       - url
                       type: object
                     image:
-                      description: Image holds the Crossplane controller image information
-                        for this Crossplane version.
+                      description: |-
+                        Image holds the Crossplane controller image information for this Crossplane version.
+                        If not specified, the default image configured in the Helm chart will be used.
                       properties:
                         secretRef:
                           description: SecretRef references a secret containing credentials
@@ -183,7 +184,6 @@ spec:
                       type: string
                   required:
                   - chart
-                  - image
                   - version
                   type: object
                 type: array
