@@ -760,7 +760,10 @@ func (r *CrossplaneReconciler) mapSecretToRequests(ctx context.Context, secret *
 
 func isSecretReferencedInProviderConfig(pc *v1alpha1.ProviderConfig, secretName string) bool {
 	for _, versions := range pc.Spec.CrossplaneVersions {
-		if versions.Chart.SecretRef.Name == secretName || versions.Image.SecretRef.Name == secretName {
+		if versions.Chart.SecretRef.Name == secretName {
+			return true
+		}
+		if versions.Image != nil && versions.Image.SecretRef.Name == secretName {
 			return true
 		}
 	}
@@ -807,9 +810,13 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 			// Check if available version matches the requested version
 			for _, availableVersion := range providerConfig.Spec.CrossplaneVersions {
 				if availableVersion.Version == version {
+					dockerRef := ""
+					if availableVersion.Image != nil {
+						dockerRef = availableVersion.Image.URL
+					}
 					return v1beta1.ComponentVersion{
 						OCIURL:    availableVersion.Chart.URL, // format: <image-location>:<version>
-						DockerRef: availableVersion.Image.URL, // format: <image-location>:<version>
+						DockerRef: dockerRef,                  // format: <image-location>:<version>, empty if not specified
 						Version:   version,
 					}, nil
 				}
