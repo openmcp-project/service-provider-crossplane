@@ -192,12 +192,12 @@ func Test_buildComponents(t *testing.T) {
 							{
 								Version: "v1.0.0",
 								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
 							},
 							{
 								Version: "v2.0.0",
 								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2"},
-								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/2"},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/2"},
 							},
 						},
 						Providers: v1alpha1.CrossplaneProviders{
@@ -248,12 +248,12 @@ func Test_buildComponents(t *testing.T) {
 							{
 								Version: "v1.0.0",
 								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
 							},
 							{
 								Version: "v2.0.0",
 								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-chart-secret"}},
-								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-image-secret"}},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-image-secret"}},
 							},
 						},
 						Providers: v1alpha1.CrossplaneProviders{
@@ -331,12 +331,12 @@ func Test_buildComponents(t *testing.T) {
 							{
 								Version: "v1.0.0",
 								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
 							},
 							{
 								Version: "v2.0.0",
 								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
 							},
 						},
 						Providers: v1alpha1.CrossplaneProviders{
@@ -405,12 +405,12 @@ func Test_buildComponents(t *testing.T) {
 							{
 								Version: "v1.0.0",
 								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/foo", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/foo", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/foo", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
 							},
 							{
 								Version: "v2.0.0",
 								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-chart-secret"}},
-								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-image-secret"}},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-image-secret"}},
 							},
 						},
 						Providers: v1alpha1.CrossplaneProviders{
@@ -491,7 +491,7 @@ func Test_buildComponents(t *testing.T) {
 							{
 								Version: "v1.0.0",
 								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
 							},
 						},
 						Providers: v1alpha1.CrossplaneProviders{
@@ -609,12 +609,12 @@ func Test_buildComponents(t *testing.T) {
 							{
 								Version: "v1.0.0",
 								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/foo", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/foo", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/foo", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
 							},
 							{
 								Version: "v2.0.0",
 								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-chart-secret"}},
-								Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-image-secret"}},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-image-secret"}},
 							},
 						},
 						Providers: v1alpha1.CrossplaneProviders{
@@ -678,7 +678,7 @@ func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 						{
 							Version: "v1.0.0",
 							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
 						},
 					},
 					Providers: v1alpha1.CrossplaneProviders{},
@@ -695,7 +695,7 @@ func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 						{
 							Version: "v1.0.0",
 							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
 						},
 					},
 					Providers: v1alpha1.CrossplaneProviders{},
@@ -712,7 +712,7 @@ func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 						{
 							Version: "v1.0.0",
 							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
 						},
 					},
 					Providers: v1alpha1.CrossplaneProviders{
@@ -733,12 +733,12 @@ func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 						{
 							Version: "v1.0.0",
 							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
 						},
 						{
 							Version: "v2.0.0",
 							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "v2-chart-secret"}},
-							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/2"},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/2"},
 						},
 					},
 					Providers: v1alpha1.CrossplaneProviders{},
@@ -755,7 +755,7 @@ func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 						{
 							Version: "v1.0.0",
 							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
 						},
 					},
 					Providers: v1alpha1.CrossplaneProviders{
@@ -787,13 +787,45 @@ func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 						{
 							Version: "v1.0.0",
 							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
 						},
 					},
 					Providers: v1alpha1.CrossplaneProviders{},
 				},
 			},
 			secretName: "some-secret",
+			want:       false,
+		},
+		{
+			name: "nil image - only chart secret checked",
+			pc: &v1alpha1.ProviderConfig{
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{},
+				},
+			},
+			secretName: "chart-secret",
+			want:       true,
+		},
+		{
+			name: "nil image - image secret does not match",
+			pc: &v1alpha1.ProviderConfig{
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{},
+				},
+			},
+			secretName: "image-secret",
 			want:       false,
 		},
 	}
@@ -832,7 +864,7 @@ func Test_mapSecretToRequests(t *testing.T) {
 						{
 							Version: "v1.0.0",
 							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
 						},
 					},
 					Providers: v1alpha1.CrossplaneProviders{},
@@ -868,7 +900,7 @@ func Test_mapSecretToRequests(t *testing.T) {
 						{
 							Version: "v1.0.0",
 							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
 						},
 					},
 					Providers: v1alpha1.CrossplaneProviders{},
@@ -898,7 +930,7 @@ func Test_mapSecretToRequests(t *testing.T) {
 						{
 							Version: "v1.0.0",
 							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
 						},
 					},
 					Providers: v1alpha1.CrossplaneProviders{},
@@ -924,7 +956,7 @@ func Test_mapSecretToRequests(t *testing.T) {
 						{
 							Version: "v1.0.0",
 							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-							Image:   v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
 						},
 					},
 					Providers: v1alpha1.CrossplaneProviders{

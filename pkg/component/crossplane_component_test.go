@@ -108,6 +108,29 @@ func Test_Crossplane(t *testing.T) {
 				),
 			},
 		},
+		{
+			desc: "should be enabled without image override when no image is specified",
+			config: &v1alpha1.CrossplaneSpec{
+				Version: "1.2.3",
+			},
+			configValues:         &apiextensionsv1.JSON{Raw: []byte(`{"replicas":2}`)},
+			imagePullSecretNames: []string{"secret-1"},
+			enabled:              true,
+			versionResolver:      fakeVersionResolverNoDockerRef(),
+			validationFuncs: []validationFunc{
+				hasName("Crossplane"),
+				isEnabled(true),
+				isAllowed(true),
+				isFluxComponent(
+					returnsOCIRepository(),
+					returnsHelmRelease(
+						hasHelmValue(2, "replicas"), // custom value
+						hasHelmValue("secret-1", "imagePullSecrets", "0"),
+						lacksHelmKey("image"), // image key must not be set when no image URL provided
+					),
+				),
+			},
+		},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {

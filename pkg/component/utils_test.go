@@ -53,6 +53,15 @@ func fakeVersionResolver(shouldFail bool) v1beta1.VersionResolverFn {
 	}
 }
 
+func fakeVersionResolverNoDockerRef() v1beta1.VersionResolverFn {
+	return func(componentName string, channelName string) (v1beta1.ComponentVersion, error) {
+		return v1beta1.ComponentVersion{
+			OCIURL:  testRegistry + strings.ToLower(componentName) + ":v1.0.0",
+			Version: "v1.0.0",
+		}, nil
+	}
+}
+
 type validationFunc func(t *testing.T, ctx context.Context, c juggler.Component)
 type targetValidationFunc func(t *testing.T, ctx context.Context, c components.TargetComponent)
 type fluxValidationFunc func(t *testing.T, ctx context.Context, c fluxcd.FluxComponent)
@@ -181,6 +190,16 @@ func hasHelmValue(expected any, path ...string) helmReleaseValidationFunc {
 			assert.NoError(t, err)
 			assert.EqualValues(t, expected, actual)
 		}
+	}
+}
+
+func lacksHelmKey(path ...string) helmReleaseValidationFunc {
+	return func(t *testing.T, ctx context.Context, h *fluxcd.HelmReleaseManifesto) {
+		if h.Manifest.Spec.Values == nil {
+			return
+		}
+		_, err := getNestedValue(h.Manifest.GetValues(), path...)
+		assert.ErrorIs(t, err, errValueNotFound, "expected key %v to be absent", path)
 	}
 }
 

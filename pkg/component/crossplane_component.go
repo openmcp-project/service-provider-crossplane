@@ -171,15 +171,19 @@ func (c *Crossplane) applyDefaultValues(rfn v1beta1.VersionResolverFn) error {
 	// Add imagePullSecrets if provided in ProviderConfig spec
 	values["imagePullSecrets"] = c.ImagePullSecretNames
 
-	url, tag, _, err := image.ParseImage(comp.DockerRef)
-	if err != nil {
-		return err
-	}
+	// Override the image only if an image URL was provided in ProviderConfig spec.
+	// If omitted, the Helm chart default image is used.
+	if comp.DockerRef != "" {
+		url, tag, _, err := image.ParseImage(comp.DockerRef)
+		if err != nil {
+			return err
+		}
 
-	// Pull Deployment image from specified chart URL provided in ProviderConfig spec
-	values["image"] = map[string]any{
-		"repository": url,
-		"tag":        tag,
+		// Pull Deployment image from specified chart URL provided in ProviderConfig spec
+		values["image"] = map[string]any{
+			"repository": url,
+			"tag":        tag,
+		}
 	}
 
 	if c.CABundleRef != nil {
