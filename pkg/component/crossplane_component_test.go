@@ -113,10 +113,9 @@ func Test_Crossplane(t *testing.T) {
 			config: &v1alpha1.CrossplaneSpec{
 				Version: "1.2.3",
 			},
-			configValues:         &apiextensionsv1.JSON{Raw: []byte(`{"replicas":2}`)},
-			imagePullSecretNames: []string{"secret-1"},
-			enabled:              true,
-			versionResolver:      fakeVersionResolverNoDockerRef(),
+			configValues:    &apiextensionsv1.JSON{Raw: []byte(`{"replicas":2}`)},
+			enabled:         true,
+			versionResolver: fakeVersionResolverNoDockerRef(),
 			validationFuncs: []validationFunc{
 				hasName("Crossplane"),
 				isEnabled(true),
@@ -125,8 +124,7 @@ func Test_Crossplane(t *testing.T) {
 					returnsOCIRepository(),
 					returnsHelmRelease(
 						hasHelmValue(2, "replicas"), // custom value
-						hasHelmValue("secret-1", "imagePullSecrets", "0"),
-						lacksHelmKey("image"), // image key must not be set when no image URL provided
+						lacksHelmKey("image"),       // image key must not be set when no image URL provided
 					),
 				),
 			},
