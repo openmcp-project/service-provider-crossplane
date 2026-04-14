@@ -1,6 +1,6 @@
 module github.com/openmcp-project/service-provider-crossplane
 
-go 1.26.1
+go 1.26.2
 
 // TODO: remove this replace once crossplane-runtime supports controller-runtime v0.23+.
 // crossplane-runtime v1.20.0 imports an older version of controller-runtime that does not implement the Apply method added to SubResourceWriter in controller-runtime v0.23.
