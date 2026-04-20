@@ -246,9 +246,13 @@ func listTypeIs(sample client.ObjectList) orphanedObjectsDetectorValidationFunc 
 	}
 }
 
-func hasFilterCriteria(count int) orphanedObjectsDetectorValidationFunc {
+func hasFilterCriteria(count int, opts ...client.ListOption) orphanedObjectsDetectorValidationFunc {
 	return func(t *testing.T, ctx context.Context, dc object.DetectorContext) {
+		t.Helper()
 		assert.Len(t, dc.FilterCriteria, count)
+		for _, o := range opts {
+			assert.Contains(t, dc.FilterCriteria, o)
+		}
 	}
 }
 

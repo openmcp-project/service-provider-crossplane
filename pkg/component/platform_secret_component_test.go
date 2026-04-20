@@ -109,7 +109,7 @@ func Test_PlatformSecret(t *testing.T) {
 					canBuildAndReconcile(nil),
 					implementsOrphanedObjectsDetector(
 						listTypeIs(&corev1.SecretList{}),
-						hasFilterCriteria(2),
+						hasFilterCriteria(3, client.InNamespace(pSecretA.Namespace)),
 						canConvert(&corev1.SecretList{Items: []corev1.Secret{*pSecretA}}, 1),
 						canCheckSame(&PlatformSecret{Target: client.ObjectKeyFromObject(pSecretA)}, &PlatformSecret{Target: client.ObjectKeyFromObject(pSecretA)}, true),
 						canCheckSame(&PlatformSecret{Target: client.ObjectKeyFromObject(pSecretA)}, &PlatformSecret{Target: client.ObjectKeyFromObject(pSecretB)}, false),
