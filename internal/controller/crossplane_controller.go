@@ -83,6 +83,7 @@ var (
 const (
 	requestSuffixMCP          = "--mcp"
 	defaultProviderConfigName = "default"
+	secretNamePrefix          = "sp-crossplane-"
 )
 
 // CrossplaneReconciler reconciles a Crossplane object
@@ -450,10 +451,18 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 	}
 	xpContainerImagePullSecrets := discoverCrossplaneImagePullSecrets(xp.Spec, pc.Spec.CrossplaneVersions)
 
+	var prefixedChartPullSecret string
+	if xpHelmChartPullSecret.Name != "" {
+		prefixedChartPullSecret, err = prefixSecretName(xpHelmChartPullSecret.Name)
+		if err != nil {
+			return nil, fmt.Errorf("error generating secret name: %w", err)
+		}
+	}
+
 	xpComp := &component.Crossplane{
 		Enabled:              enabled,
 		Config:               &xp.Spec,
-		ChartPullSecretName:  xpHelmChartPullSecret.Name,
+		ChartPullSecretName:  prefixedChartPullSecret,
 		ImagePullSecretNames: extractSecretNames(xpContainerImagePullSecrets),
 		CABundleRef:          pc.Spec.CABundleRef,
 	}
@@ -485,7 +494,7 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 				Namespace: podNs,
 			},
 			Target: types.NamespacedName{
-				Name:      xpHelmChartPullSecret.Name,
+				Name:      prefixedChartPullSecret,
 				Namespace: rcontext.TenantNamespace(ctx),
 			},
 			Enabled: xpComp.IsEnabled(),
@@ -860,4 +869,12 @@ func (r *CrossplaneReconciler) removeFinalizer(ctx context.Context, object clien
 
 func (r *CrossplaneReconciler) hasFinalizer(object client.Object, finalizer string) bool {
 	return controllerutil.ContainsFinalizer(object, finalizer)
+}
+
+// prefixSecretName adds the "sp-eso-" prefix to the given secret name
+// to prevent name collisions in namespaces where multiple service providers operate.
+// If the resulting name exceeds 63 characters (K8s limit), it will be truncated
+// and a hash suffix appended for uniqueness via ShortenToXCharacters.
+func prefixSecretName(secretName string) (string, error) {
+	return controllerutil2.ShortenToXCharacters(fmt.Sprintf("%s%s", secretNamePrefix, secretName), controllerutil2.K8sMaxNameLength)
 }
