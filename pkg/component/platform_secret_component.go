@@ -35,6 +35,7 @@ func (s *PlatformSecret) OrphanDetectorContext() object.DetectorContext {
 		FilterCriteria: object.FilterCriteria{
 			utils.IsManaged(),
 			utils.HasComponentLabel(),
+			client.InNamespace(s.Target.Namespace),
 		},
 		ConvertFunc: func(list client.ObjectList) []juggler.Component {
 			var secrets []juggler.Component //nolint:prealloc
