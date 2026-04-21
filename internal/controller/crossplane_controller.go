@@ -871,7 +871,7 @@ func (r *CrossplaneReconciler) hasFinalizer(object client.Object, finalizer stri
 	return controllerutil.ContainsFinalizer(object, finalizer)
 }
 
-// prefixSecretName adds the "sp-eso-" prefix to the given secret name
+// prefixSecretName adds the "sp-crossplane-" prefix to the given secret name
 // to prevent name collisions in namespaces where multiple service providers operate.
 // If the resulting name exceeds 63 characters (K8s limit), it will be truncated
 // and a hash suffix appended for uniqueness via ShortenToXCharacters.

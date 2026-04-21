@@ -1051,13 +1051,11 @@ func Test_mapSecretToRequests_providerConfigNotFound(t *testing.T) {
 
 func Test_prefixSecretName(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		wantLen int // expected max length
-		wantErr bool
+		name  string
+		input string
 	}{
-		{"short name", "privateregcred", 27, false}, // "sp-crossplane-" + 14 chars
-		{"long name truncated", strings.Repeat("a", 60), 63, false},
+		{"short name", "privateregcred"},
+		{"long name truncated", strings.Repeat("a", 60)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
