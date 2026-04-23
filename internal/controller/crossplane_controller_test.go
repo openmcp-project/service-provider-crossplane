@@ -19,7 +19,9 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	crossplanev1beta1 "github.com/crossplane/crossplane/apis/pkg/v1beta1"
@@ -27,6 +29,8 @@ import (
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -273,7 +277,7 @@ func Test_buildComponents(t *testing.T) {
 				&component.Crossplane{
 					Enabled:              true,
 					Config:               &v1alpha1.CrossplaneSpec{Version: "v2.0.0", Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}}},
-					ChartPullSecretName:  "other-chart-secret",
+					ChartPullSecretName:  fmt.Sprintf("%s%s", secretNamePrefix, "other-chart-secret"),
 					ImagePullSecretNames: []string{"other-image-secret"},
 				},
 				&component.CrossplaneProvider{
@@ -284,7 +288,7 @@ func Test_buildComponents(t *testing.T) {
 				&component.PlatformSecret{
 					SourceClient: nil,
 					Source:       client.ObjectKey{Name: "other-chart-secret", Namespace: "pod-namespace"},
-					Target:       client.ObjectKey{Name: "other-chart-secret", Namespace: "tenant-namespace"},
+					Target:       client.ObjectKey{Name: fmt.Sprintf("%s%s", secretNamePrefix, "other-chart-secret"), Namespace: "tenant-namespace"},
 					Enabled:      true,
 				},
 				&component.Secret{
@@ -359,7 +363,7 @@ func Test_buildComponents(t *testing.T) {
 						Version:   "v1.0.0",
 						Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
 					},
-					ChartPullSecretName:  "chart-secret",
+					ChartPullSecretName:  fmt.Sprintf("%s%s", secretNamePrefix, "chart-secret"),
 					ImagePullSecretNames: []string{"image-secret"},
 				},
 				&component.CrossplaneProvider{
@@ -370,7 +374,7 @@ func Test_buildComponents(t *testing.T) {
 				&component.PlatformSecret{
 					SourceClient: nil,
 					Source:       client.ObjectKey{Name: "chart-secret", Namespace: "pod-namespace"},
-					Target:       client.ObjectKey{Name: "chart-secret", Namespace: "tenant-namespace"},
+					Target:       client.ObjectKey{Name: fmt.Sprintf("%s%s", secretNamePrefix, "chart-secret"), Namespace: "tenant-namespace"},
 					Enabled:      true,
 				},
 				&component.Secret{
@@ -433,7 +437,7 @@ func Test_buildComponents(t *testing.T) {
 						Version:   "v1.0.0",
 						Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
 					},
-					ChartPullSecretName:  "chart-secret",
+					ChartPullSecretName:  fmt.Sprintf("%s%s", secretNamePrefix, "chart-secret"),
 					ImagePullSecretNames: []string{"image-secret"},
 				},
 				&component.CrossplaneProvider{
@@ -444,7 +448,7 @@ func Test_buildComponents(t *testing.T) {
 				&component.PlatformSecret{
 					SourceClient: nil,
 					Source:       client.ObjectKey{Name: "chart-secret", Namespace: "pod-namespace"},
-					Target:       client.ObjectKey{Name: "chart-secret", Namespace: "tenant-namespace"},
+					Target:       client.ObjectKey{Name: fmt.Sprintf("%s%s", secretNamePrefix, "chart-secret"), Namespace: "tenant-namespace"},
 					Enabled:      false,
 				},
 				&component.Secret{
@@ -1042,5 +1046,23 @@ func Test_mapSecretToRequests_providerConfigNotFound(t *testing.T) {
 	got := r.mapSecretToRequests(context.Background(), secret)
 	if got != nil {
 		t.Errorf("mapSecretToRequests() = %v, want nil when ProviderConfig not found", got)
+	}
+}
+
+func Test_prefixSecretName(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"short name", "privateregcred"},
+		{"long name truncated", strings.Repeat("a", 60)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := prefixSecretName(tt.input)
+			require.NoError(t, err)
+			assert.True(t, strings.HasPrefix(got, secretNamePrefix))
+			assert.LessOrEqual(t, len(got), 63)
+		})
 	}
 }
