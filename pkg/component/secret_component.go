@@ -39,7 +39,7 @@ func (s *Secret) GetNamespace() string {
 }
 
 // OrphanDetectorContext implements OrphanedObjectsDetector.
-func (s *Secret) OrphanDetectorContext() object.DetectorContext {
+func (s *Secret) OrphanDetectorContext(_ context.Context) object.DetectorContext {
 	return object.DetectorContext{
 		ListType: &corev1.SecretList{},
 		FilterCriteria: object.FilterCriteria{

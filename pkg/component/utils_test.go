@@ -235,7 +235,7 @@ func implementsOrphanedObjectsDetector(additionalValidations ...orphanedObjectsD
 		}
 
 		for _, v := range additionalValidations {
-			v(t, ctx, ood.OrphanDetectorContext())
+			v(t, ctx, ood.OrphanDetectorContext(ctx))
 		}
 	}
 }

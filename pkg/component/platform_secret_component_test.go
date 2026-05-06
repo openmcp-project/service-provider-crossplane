@@ -142,7 +142,7 @@ func Test_PlatformSecret(t *testing.T) {
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
 			ctx := newContext(nil)
-			rcontext.WithTenantNamespace(ctx, stableMCPNamespace)
+			ctx = rcontext.WithTenantNamespace(ctx, tC.target.Namespace)
 			fakeClient := fake.NewClientBuilder().WithInterceptorFuncs(tC.interceptorFuncs).WithObjects(sourceSecret).Build()
 			c := &PlatformSecret{
 				Enabled:      tC.enabled,

@@ -48,7 +48,7 @@ func (d *DeploymentRuntimeConfig) ReconcileObject(_ context.Context, obj client.
 }
 
 // OrphanDetectorContext implements object.OrphanedObjectsDetector.
-func (*DeploymentRuntimeConfig) OrphanDetectorContext() object.DetectorContext {
+func (*DeploymentRuntimeConfig) OrphanDetectorContext(_ context.Context) object.DetectorContext {
 	return object.DetectorContext{
 		ListType: &crossplanev1beta1.DeploymentRuntimeConfigList{},
 		FilterCriteria: object.FilterCriteria{

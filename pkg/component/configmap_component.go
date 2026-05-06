@@ -39,7 +39,7 @@ func (c *ConfigMap) GetNamespace() string {
 }
 
 // OrphanDetectorContext implements OrphanedObjectsDetector.
-func (c *ConfigMap) OrphanDetectorContext() object.DetectorContext {
+func (c *ConfigMap) OrphanDetectorContext(_ context.Context) object.DetectorContext {
 	return object.DetectorContext{
 		ListType: &corev1.ConfigMapList{},
 		FilterCriteria: object.FilterCriteria{

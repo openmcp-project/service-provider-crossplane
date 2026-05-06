@@ -5,6 +5,7 @@ import (
 
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/object"
+	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,13 +30,15 @@ func (s *PlatformSecret) IsStatusInternal() bool {
 }
 
 // OrphanDetectorContext implements OrphanedObjectsDetector.
-func (s *PlatformSecret) OrphanDetectorContext() object.DetectorContext {
+func (s *PlatformSecret) OrphanDetectorContext(ctx context.Context) object.DetectorContext {
+	mcpNamespaceOnPlatformCluster := rcontext.TenantNamespace(ctx)
+
 	return object.DetectorContext{
 		ListType: &corev1.SecretList{},
 		FilterCriteria: object.FilterCriteria{
 			utils.IsManaged(),
 			utils.HasComponentLabel(),
-			client.InNamespace(s.Target.Namespace),
+			client.InNamespace(mcpNamespaceOnPlatformCluster),
 		},
 		ConvertFunc: func(list client.ObjectList) []juggler.Component {
 			var secrets []juggler.Component //nolint:prealloc
