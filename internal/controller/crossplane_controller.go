@@ -672,7 +672,7 @@ func extractHelmChartPullSecretForVersion(targetVersion string, xpversions []v1a
 func discoverCrossplaneImagePullSecrets(spec v1alpha1.CrossplaneSpec, xpversions []v1alpha1.CrossplaneVersion) []commonapi.LocalObjectReference {
 	secrets := make([]commonapi.LocalObjectReference, 0, len(xpversions))
 	for _, v := range xpversions {
-		if spec.Version == v.Version {
+		if spec.Version == v.Version && v.Image != nil {
 			secrets = append(secrets, v.Image.SecretRef)
 		}
 	}
