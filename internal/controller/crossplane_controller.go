@@ -266,7 +266,7 @@ func (r *CrossplaneReconciler) doDeleteComponents(ctx context.Context, mcpClient
 	if errors.Is(err, errComponentRemaining) {
 		log.Info(err.Error())
 		rr.Conditions = overrideCondition(rr.Conditions, ConditionTypeReconciled, metav1.ConditionFalse, ReasonDeletionInProgress, "Deleting components")
-		rr.SmartRequeue = ctrlutils.SR_BACKOFF
+		rr.SmartRequeue = ctrlutils.SR_RESET
 		return
 	}
 	if err != nil {
