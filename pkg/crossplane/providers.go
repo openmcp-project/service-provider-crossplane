@@ -1,7 +1,7 @@
 package crossplane
 
 import (
-	crossplanev1 "github.com/crossplane/crossplane/apis/pkg/v1"
+	crossplanev1 "github.com/crossplane/crossplane/v2/apis/pkg/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"

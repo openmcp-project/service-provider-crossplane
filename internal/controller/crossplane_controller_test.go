@@ -24,7 +24,7 @@ import (
 	"strings"
 	"testing"
 
-	crossplanev1beta1 "github.com/crossplane/crossplane/apis/pkg/v1beta1"
+	crossplanev1beta1 "github.com/crossplane/crossplane/v2/apis/pkg/v1beta1"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 	"github.com/openmcp-project/controller-utils/pkg/clusters"

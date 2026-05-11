@@ -25,15 +25,17 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
+	"github.com/openmcp-project/controller-utils/pkg/conditions"
+	ctrlutils "github.com/openmcp-project/controller-utils/pkg/controller"
 	"github.com/openmcp-project/controller-utils/pkg/controller/smartrequeue"
+	errutils "github.com/openmcp-project/controller-utils/pkg/errors"
 	openmcpconsts "github.com/openmcp-project/openmcp-operator/api/constants"
 	corev1 "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	condApi "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -58,12 +60,11 @@ import (
 	"github.com/openmcp-project/service-provider-crossplane/pkg/crossplane"
 	sputils "github.com/openmcp-project/service-provider-crossplane/pkg/utils"
 
-	crossplanev1beta1 "github.com/crossplane/crossplane/apis/pkg/v1beta1"
+	crossplanev1beta1 "github.com/crossplane/crossplane/v2/apis/pkg/v1beta1"
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/components"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/fluxcd"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/object"
-	cpoutils "github.com/openmcp-project/control-plane-operator/pkg/utils"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 )
 
@@ -91,7 +92,7 @@ type CrossplaneReconciler struct {
 	PlatformCluster         *clusters.Cluster
 	OnboardingCluster       *clusters.Cluster
 	ClusterAccessReconciler clusteraccess.Reconciler
-	Recorder                record.EventRecorder
+	Recorder                events.EventRecorder
 	RequeueStore            *smartrequeue.Store
 	RecieveEventsChannel    <-chan event.GenericEvent
 	SecretsNamespace        string
@@ -103,55 +104,33 @@ type CrossplaneReconciler struct {
 // +kubebuilder:rbac:groups=crossplane.services.openmcp.cloud,resources=crossplanes/finalizers,verbs=update
 func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
-	// Fetch the Crossplane instance from the onboarding cluster
-	crossplane := &v1alpha1.Crossplane{}
-	if err := r.OnboardingCluster.Client().Get(ctx, req.NamespacedName, crossplane); err != nil {
+
+	xp := &v1alpha1.Crossplane{}
+	if err := r.OnboardingCluster.Client().Get(ctx, req.NamespacedName, xp); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
 	}
-
-	// Get smart requeue entry for this object
-	requeueEntry := r.RequeueStore.For(crossplane)
-	ctx = smartrequeue.NewContext(ctx, requeueEntry)
+	oldXP := xp.DeepCopy()
 
 	log.Info("Reconciling Crossplane")
 
-	// Get ProviderConfig from Platform cluster
-	pc := &v1alpha1.ProviderConfig{}
-	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: defaultProviderConfigName}, pc); err != nil {
-		return requeueEntry.ReturnError(err)
+	rr := ctrlutils.ReconcileResult[*v1alpha1.Crossplane]{
+		Object:    xp,
+		OldObject: oldXP,
 	}
 
-	// Setup reconciliation context
-	ctx, err := r.setupReconciliationContext(ctx, req, pc)
-	if err != nil {
-		return requeueEntry.ReturnError(err)
-	}
+	r.doReconcile(ctx, req, &rr)
 
-	// Check if object is in deletion and everything except for the access request
-	// has been cleaned up already.
-	if r.readyForCleanup(crossplane) {
-		return r.cleanupClusterAccess(ctx, req, crossplane)
-	}
-
-	// Setup cluster access
-	mcpCluster, result, err := r.setupClusterAccess(ctx, req, crossplane)
-	if err != nil {
-		return requeueEntry.ReturnError(err)
-	}
-	if result != nil {
-		return requeueEntry.IsStable()
-	}
-
-	// Setup Flux kubeconfig
-	ctx, err = r.setupFluxKubeconfig(ctx, req)
-	if err != nil {
-		return requeueEntry.ReturnError(err)
-	}
-
-	return r.reconcileCrossplaneInstance(ctx, mcpCluster.Client(), crossplane, pc)
+	return ctrlutils.NewOpenMCPStatusUpdaterBuilder[*v1alpha1.Crossplane]().
+		WithNestedStruct("Status").
+		WithConditionUpdater(false).
+		WithConditionEvents(r.Recorder, conditions.EventPerChange).
+		WithPhaseUpdateFunc(computePhase).
+		WithSmartRequeue(r.RequeueStore, smartRequeueConditional).
+		Build().
+		UpdateStatus(ctx, r.OnboardingCluster.Client(), rr)
 }
 
 func inDeletion(obj client.Object) bool {
@@ -165,14 +144,166 @@ func (r *CrossplaneReconciler) readyForCleanup(crossplane *v1alpha1.Crossplane) 
 		!r.hasFinalizer(crossplane, FinalizerLegacy)
 }
 
-func (r *CrossplaneReconciler) updateStatus(ctx context.Context, crossplane *v1alpha1.Crossplane, newConditions *[]metav1.Condition) {
-	log := log.FromContext(ctx)
-	changed := cpoutils.UpdateConditions(&crossplane.Status.Conditions, *newConditions)
-	if changed {
-		// TODO: do not try to update status when Crossplane CR is deleted
-		if err := r.OnboardingCluster.Client().Status().Update(ctx, crossplane); err != nil {
-			log.Error(err, "failed to update status from Crossplane CR at Onboarding cluster")
+func (r *CrossplaneReconciler) doReconcile(ctx context.Context, req ctrl.Request, rr *ctrlutils.ReconcileResult[*v1alpha1.Crossplane]) {
+	xp := rr.Object
+	addCondition := ctrlutils.GenerateCreateConditionFunc(rr)
+
+	// Get ProviderConfig from Platform cluster
+	pc := &v1alpha1.ProviderConfig{}
+	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: defaultProviderConfigName}, pc); err != nil {
+		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonProviderConfigNotFound, fmt.Sprintf("ProviderConfig '%s' not found: %v", defaultProviderConfigName, err))
+		rr.ReconcileError = errutils.WithReason(err, ReasonProviderConfigNotFound)
+		rr.SmartRequeue = ctrlutils.SR_RESET
+		r.Recorder.Eventf(xp, nil, corev1.EventTypeWarning, ReasonProviderConfigNotFound, "Reconcile", "ProviderConfig '%s' not found: %v", defaultProviderConfigName, err)
+		return
+	}
+
+	// Setup reconciliation context
+	ctx, err := r.setupReconciliationContext(ctx, req, pc)
+	if err != nil {
+		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonReconciliationContextFailed, err.Error())
+		rr.ReconcileError = errutils.WithReason(err, ReasonReconciliationContextFailed)
+		rr.SmartRequeue = ctrlutils.SR_RESET
+		return
+	}
+
+	// Check if object is in deletion and everything except for the access request has been cleaned up already.
+	if r.readyForCleanup(xp) {
+		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonDeletionInProgress, "Cleaning up cluster access")
+		rr.SmartRequeue = ctrlutils.SR_RESET
+		r.doCleanupClusterAccess(ctx, req, xp, rr)
+		return
+	}
+
+	// Setup cluster access
+	mcpCluster, result, err := r.setupClusterAccess(ctx, req, xp)
+	if err != nil {
+		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonClusterAccessFailed, err.Error())
+		rr.ReconcileError = errutils.WithReason(err, ReasonClusterAccessFailed)
+		rr.SmartRequeue = ctrlutils.SR_RESET
+		r.Recorder.Eventf(xp, nil, corev1.EventTypeWarning, ReasonClusterAccessFailed, "Reconcile", "Cluster access setup failed: %v", err)
+		return
+	}
+	if result != nil {
+		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonClusterAccessPending, "Cluster access request pending")
+		rr.SmartRequeue = ctrlutils.SR_BACKOFF
+		rr.Result = *result
+		return
+	}
+
+	// Setup Flux kubeconfig
+	ctx, err = r.setupFluxKubeconfig(ctx, req)
+	if err != nil {
+		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonFluxKubeconfigFailed, err.Error())
+		rr.ReconcileError = errutils.WithReason(err, ReasonFluxKubeconfigFailed)
+		rr.SmartRequeue = ctrlutils.SR_RESET
+		return
+	}
+
+	// Pre-reconciliation steps succeeded
+	addCondition(ConditionTypeReconciled, metav1.ConditionTrue, ReasonReconciled, "")
+
+	// Reconcile components
+	r.doReconcileComponents(ctx, mcpCluster.Client(), xp, pc, rr)
+}
+
+func (r *CrossplaneReconciler) doReconcileComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig, rr *ctrlutils.ReconcileResult[*v1alpha1.Crossplane]) {
+	if inDeletion(xp) {
+		r.doDeleteComponents(ctx, mcpClient, xp, pc, rr)
+		return
+	}
+
+	// Add components finalizer
+	if err := r.ensureFinalizer(ctx, xp, FinalizerComponents); err != nil {
+		rr.ReconcileError = errutils.WithReason(fmt.Errorf("failed to add components finalizer: %w", err), ReasonFinalizerFailed)
+		rr.SmartRequeue = ctrlutils.SR_RESET
+		return
+	}
+	// Remove legacy finalizer
+	if err := r.removeFinalizer(ctx, xp, FinalizerLegacy); err != nil {
+		rr.ReconcileError = errutils.WithReason(fmt.Errorf("failed to remove legacy finalizer: %w", err), ReasonFinalizerFailed)
+		rr.SmartRequeue = ctrlutils.SR_RESET
+		return
+	}
+
+	componentConditions, err := r.createOrUpdateCrossplaneInstance(ctx, mcpClient, xp, pc)
+	if err != nil {
+		rr.ReconcileError = errutils.WithReason(err, ReasonComponentReconcileFailed)
+		rr.SmartRequeue = ctrlutils.SR_RESET
+		r.Recorder.Eventf(xp, nil, corev1.EventTypeWarning, ReasonComponentReconcileFailed, "Reconcile", "Failed to reconcile components: %v", err)
+		return
+	}
+
+	rr.Conditions = append(rr.Conditions, componentConditions...)
+
+	allReady := true
+	for _, c := range componentConditions {
+		if c.Status != metav1.ConditionTrue {
+			allReady = false
+			break
 		}
+	}
+	if allReady {
+		rr.SmartRequeue = ctrlutils.SR_BACKOFF
+	} else {
+		rr.SmartRequeue = ctrlutils.SR_RESET
+	}
+}
+
+func (r *CrossplaneReconciler) doDeleteComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig, rr *ctrlutils.ReconcileResult[*v1alpha1.Crossplane]) {
+	log := log.FromContext(ctx)
+
+	if !r.hasFinalizer(xp, FinalizerComponents) {
+		rr.SmartRequeue = ctrlutils.SR_RESET
+		return
+	}
+
+	componentConditions, err := r.deleteControlPlaneComponents(ctx, mcpClient, xp, pc)
+	rr.Conditions = append(rr.Conditions, componentConditions...)
+
+	if errors.Is(err, errComponentRemaining) {
+		log.Info(err.Error())
+		rr.SmartRequeue = ctrlutils.SR_BACKOFF
+		return
+	}
+	if err != nil {
+		rr.ReconcileError = errutils.WithReason(err, ReasonDeletionComponentCleanupError)
+		rr.SmartRequeue = ctrlutils.SR_RESET
+		r.Recorder.Eventf(xp, nil, corev1.EventTypeWarning, ReasonDeletionComponentCleanupError, "Delete", "Failed to delete components: %v", err)
+		return
+	}
+
+	// Remove components finalizer
+	if err := r.removeFinalizer(ctx, xp, FinalizerComponents); err != nil {
+		rr.ReconcileError = errutils.WithReason(fmt.Errorf("failed to remove components finalizer: %w", err), ReasonFinalizerFailed)
+		rr.SmartRequeue = ctrlutils.SR_RESET
+		return
+	}
+
+	rr.SmartRequeue = ctrlutils.SR_RESET
+}
+
+func (r *CrossplaneReconciler) doCleanupClusterAccess(ctx context.Context, req ctrl.Request, xp *v1alpha1.Crossplane, rr *ctrlutils.ReconcileResult[*v1alpha1.Crossplane]) {
+	log := log.FromContext(ctx)
+
+	// Delete AccessRequest
+	res, err := r.ClusterAccessReconciler.ReconcileDelete(ctx, req)
+	if err != nil {
+		log.Error(err, "failed to delete cluster access for crossplane instance")
+		rr.ReconcileError = errutils.WithReason(err, ReasonClusterAccessFailed)
+		return
+	}
+
+	// AccessRequest was marked for deletion but not gone yet
+	if res.RequeueAfter > 0 {
+		rr.Result = res
+		return
+	}
+
+	// Remove access finalizer
+	if err := r.removeFinalizer(ctx, xp, FinalizerAccess); err != nil {
+		log.Error(err, "failed to remove access finalizer")
+		rr.ReconcileError = errutils.WithReason(err, ReasonFinalizerFailed)
 	}
 }
 
@@ -227,29 +358,6 @@ func (r *CrossplaneReconciler) setupClusterAccess(ctx context.Context, req ctrl.
 	return mcpCluster, nil, nil
 }
 
-func (r *CrossplaneReconciler) cleanupClusterAccess(ctx context.Context, req ctrl.Request, crossplane *v1alpha1.Crossplane) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
-
-	// Delete AccessRequest
-	res, err := r.ClusterAccessReconciler.ReconcileDelete(ctx, req)
-	if err != nil {
-		log.Error(err, "failed to delete cluster access for crossplane instance")
-		return ctrl.Result{}, err
-	}
-
-	// AccessRequest was marked for deletion but not gone yet
-	if res.RequeueAfter > 0 {
-		return res, nil
-	}
-
-	// Remove access finalizer
-	if err := r.removeFinalizer(ctx, crossplane, FinalizerAccess); err != nil {
-		log.Error(err, "failed to remove access finalizer")
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
-}
-
 func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl.Request) (context.Context, error) {
 	tenantNamespace, err := libutils.StableMCPNamespace(req.Name, req.Namespace)
 	if err != nil {
@@ -274,91 +382,6 @@ func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl
 	}
 	ctx = rcontext.WithFluxKubeconfigRef(ctx, secretRef)
 	return ctx, nil
-}
-
-func (r *CrossplaneReconciler) reconcileCrossplaneInstance(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
-	requeueEntry := smartrequeue.FromContext(ctx)
-
-	// Handle deletion
-	if inDeletion(xp) {
-		return r.deleteCrossplaneInstance(ctx, mcpClient, xp, pc)
-	}
-
-	// Add components finalizer
-	if err := r.ensureFinalizer(ctx, xp, FinalizerComponents); err != nil {
-		return requeueEntry.ReturnError(err)
-	}
-	// Remove legacy finalizer
-	if err := r.removeFinalizer(ctx, xp, FinalizerLegacy); err != nil {
-		return requeueEntry.ReturnError(err)
-	}
-
-	conditions, err := r.createOrUpdateCrossplaneInstance(ctx, mcpClient, xp, pc)
-	if err != nil {
-		log.Error(err, "failed to create or update Crossplane instance")
-		return requeueEntry.ReturnError(err)
-	}
-
-	// Update status with new conditions
-	newConditions := []metav1.Condition{}
-	for _, c := range conditions {
-		condApi.SetStatusCondition(&newConditions, c)
-	}
-
-	r.updateStatus(ctx, xp, &newConditions)
-
-	// Check if all components are ready
-	allReady := true
-	for _, c := range newConditions {
-		if c.Status != metav1.ConditionTrue {
-			allReady = false
-			break
-		}
-	}
-
-	if allReady {
-		// All components healthy, monitor with exponential backoff
-		return requeueEntry.IsStable()
-	}
-	// Components still not ready, requeue soon
-	return requeueEntry.IsProgressing()
-}
-
-func (r *CrossplaneReconciler) deleteCrossplaneInstance(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) (ctrl.Result, error) {
-	requeueEntry := smartrequeue.FromContext(ctx)
-
-	if !r.hasFinalizer(xp, FinalizerComponents) {
-		// No finalizer, nothing to do - Juggler components deleted already
-		return requeueEntry.IsProgressing()
-	}
-
-	log := log.FromContext(ctx)
-
-	conditions, err := r.deleteControlPlaneComponents(ctx, mcpClient, xp, pc)
-
-	// Update status with current conditions
-	newConditions := []metav1.Condition{}
-	for _, c := range conditions {
-		condApi.SetStatusCondition(&newConditions, c)
-	}
-	r.updateStatus(ctx, xp, &newConditions)
-
-	if errors.Is(err, errComponentRemaining) {
-		log.Info(err.Error())
-		return requeueEntry.IsStable()
-	}
-	if err != nil {
-		return requeueEntry.ReturnError(err)
-	}
-
-	// Remove components finalizer
-	if err := r.removeFinalizer(ctx, xp, FinalizerComponents); err != nil {
-		return requeueEntry.ReturnError(err)
-	}
-
-	// Deletion completed successfully
-	return requeueEntry.IsProgressing()
 }
 
 func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
