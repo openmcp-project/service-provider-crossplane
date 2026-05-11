@@ -33,7 +33,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -383,38 +386,94 @@ func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl
 }
 
 func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
+	// Phase 1: Delete providers while Crossplane is still running.
+	// Crossplane must be running to process Provider finalizers; its PreUninstall
+	// hook refuses to uninstall while Provider or ProviderRevision resources exist.
+	if len(xp.Spec.Providers) > 0 {
+		providerComps := buildProviderComponents(xp, pc)
+		conditions, remaining, err := r.deleteComponents(ctx, mcpClient, xp, providerComps, false)
+		if err != nil {
+			return nil, err
+		}
+		if remaining {
+			return conditions, errComponentRemaining
+		}
+		// Providers are gone, but ProviderRevisions may still be terminating.
+		if hasOrphans, err := hasProviderRevisions(ctx, mcpClient); err != nil {
+			return nil, err
+		} else if hasOrphans {
+			return conditions, errComponentRemaining
+		}
+	}
+
+	// Phase 2: All providers are gone — delete everything else (Crossplane, secrets, DRC).
 	comps, err := buildComponents(ctx, r.PlatformCluster.Client(), xp, pc, false)
 	if err != nil {
 		return nil, errors.Join(errors.New("failed to build components for Crossplane instance"), err)
 	}
-	j, err := r.newJuggler(ctx, mcpClient, xp, comps)
+	conditions, remaining, err := r.deleteComponents(ctx, mcpClient, xp, comps, true)
 	if err != nil {
 		return nil, err
 	}
-	result := j.Reconcile(ctx)
-
-	anyComponentRemaining := false
-	for _, cr := range result {
-		// do not count components that are marked as "keep on uninstall".
-		if kou, ok := cr.Component.(juggler.KeepOnUninstall); ok && kou.KeepOnUninstall() {
-			continue
-		}
-		// status must be "Disabled", otherwise the component is counted as "Remaining".
-		if cr.Result != juggler.StatusDisabled {
-			anyComponentRemaining = true
-		}
-	}
-
-	conditions := []metav1.Condition{}
-	for _, componentResult := range result {
-		conditions = append(conditions, componentResult.ToCondition())
-	}
-
-	if anyComponentRemaining {
+	if remaining {
 		return conditions, errComponentRemaining
 	}
-
 	return conditions, nil
+}
+
+func (r *CrossplaneReconciler) deleteComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, comps []juggler.Component, skipKeepOnUninstall bool) ([]metav1.Condition, bool, error) {
+	j, err := r.newJuggler(ctx, mcpClient, xp, comps)
+	if err != nil {
+		return nil, false, err
+	}
+	result := j.Reconcile(ctx)
+
+	anyRemaining := false
+	for _, cr := range result {
+		if skipKeepOnUninstall {
+			if kou, ok := cr.Component.(juggler.KeepOnUninstall); ok && kou.KeepOnUninstall() {
+				continue
+			}
+		}
+		if cr.Result != juggler.StatusDisabled {
+			anyRemaining = true
+		}
+	}
+
+	conditions := make([]metav1.Condition, 0, len(result))
+	for _, cr := range result {
+		conditions = append(conditions, cr.ToCondition())
+	}
+	return conditions, anyRemaining, nil
+}
+
+func hasProviderRevisions(ctx context.Context, mcpClient client.Client) (bool, error) {
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "pkg.crossplane.io",
+		Version: "v1",
+		Kind:    "ProviderRevision",
+	})
+	if err := mcpClient.List(ctx, list, client.Limit(1)); err != nil {
+		if apimeta.IsNoMatchError(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return len(list.Items) > 0, nil
+}
+
+func buildProviderComponents(xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) []juggler.Component {
+	comps := make([]juggler.Component, 0, len(xp.Spec.Providers))
+	pullSecrets := convertImagePullSecrets(pc.Spec.Providers.ImagePullSecrets)
+	for _, provider := range xp.Spec.Providers {
+		comps = append(comps, &component.CrossplaneProvider{
+			Config:      provider,
+			Enabled:     false,
+			PullSecrets: pullSecrets,
+		})
+	}
+	return comps
 }
 
 func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
