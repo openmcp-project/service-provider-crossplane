@@ -45,8 +45,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	controllerutil2 "github.com/openmcp-project/controller-utils/pkg/controller"
-
 	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
@@ -751,7 +749,7 @@ func (r *CrossplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			r.PlatformCluster.Cluster().GetCache(),
 			&corev1.Secret{},
 			handler.TypedEnqueueRequestsFromMapFunc(r.mapSecretToRequests),
-			controllerutil2.ToTypedPredicate[*corev1.Secret](
+			ctrlutils.ToTypedPredicate[*corev1.Secret](
 				predicate.NewPredicateFuncs(func(obj client.Object) bool {
 					return obj.GetNamespace() == r.SecretsNamespace
 				}),
@@ -899,5 +897,5 @@ func (r *CrossplaneReconciler) hasFinalizer(object client.Object, finalizer stri
 // If the resulting name exceeds 63 characters (K8s limit), it will be truncated
 // and a hash suffix appended for uniqueness via ShortenToXCharacters.
 func prefixSecretName(secretName string) (string, error) {
-	return controllerutil2.ShortenToXCharacters(fmt.Sprintf("%s%s", secretNamePrefix, secretName), controllerutil2.K8sMaxNameLength)
+	return ctrlutils.ShortenToXCharacters(fmt.Sprintf("%s%s", secretNamePrefix, secretName), ctrlutils.K8sMaxNameLength)
 }

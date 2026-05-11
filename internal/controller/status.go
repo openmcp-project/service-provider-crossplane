@@ -10,6 +10,7 @@ import (
 	v1alpha1 "github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 )
 
+// Condition types and reasons for the Crossplane resource status.
 const (
 	ConditionTypeReconciled = "Reconciled"
 

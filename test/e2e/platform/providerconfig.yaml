@@ -1,0 +1,15 @@
+apiVersion: crossplane.services.openmcp.cloud/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  versions:
+    - version: "1.20.5"
+      chart:
+        url: "ghcr.io/valentingerlach/charts-mirror/crossplane:1.20.5"
+  providers:
+    availableProviders:
+      - name: provider-btp
+        package: ghcr.io/sap/crossplane-provider-btp/crossplane/provider-btp
+        versions:
+          - v1.9.0
