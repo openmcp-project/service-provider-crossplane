@@ -248,6 +248,7 @@ func (r *CrossplaneReconciler) doReconcileComponents(ctx context.Context, mcpCli
 	if allReady {
 		rr.SmartRequeue = ctrlutils.SR_BACKOFF
 	} else {
+		rr.Conditions = overrideCondition(rr.Conditions, ConditionTypeReconciled, metav1.ConditionFalse, ReasonComponentReconcileFailed, "Not all components are ready")
 		rr.SmartRequeue = ctrlutils.SR_RESET
 	}
 }

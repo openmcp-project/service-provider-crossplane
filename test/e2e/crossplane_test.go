@@ -207,6 +207,284 @@ func TestInvalidVersion(t *testing.T) {
 	testenv.Test(t, invalidVersionTest.Feature())
 }
 
+func TestInvalidProviderVersion(t *testing.T) {
+	invalidProviderVersion := "v0.0.1"
+
+	invalidProviderVersionTest := features.New("invalid provider version test").
+		Setup(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			if _, err := resources.CreateObjectsFromDir(ctx, c, "platform"); err != nil {
+				t.Errorf("failed to create platform cluster objects: %v", err)
+			}
+			return ctx
+		}).
+		Setup(providers.CreateMCP(mcpName)).
+		Assess("verify error message contains invalid provider version",
+			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+				onboardingConfig, err := clusterutils.OnboardingConfig()
+				if err != nil {
+					t.Error(err)
+					return ctx
+				}
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "crossplane.services.openmcp.cloud",
+					Version: "v1alpha1",
+					Kind:    "Crossplane",
+				})
+				obj.SetName(mcpName)
+				obj.SetNamespace("default")
+				_ = unstructured.SetNestedField(obj.Object, "1.20.5", "spec", "version")
+				_ = unstructured.SetNestedSlice(obj.Object, []interface{}{
+					map[string]interface{}{
+						"name":    providerBTPName,
+						"version": invalidProviderVersion,
+					},
+				}, "spec", "providers")
+
+				if err := onboardingConfig.Client().Resources().Create(ctx, obj); err != nil {
+					t.Errorf("failed to create Crossplane resource: %v", err)
+					return ctx
+				}
+
+				if err := wait.For(
+					conditionWithMessageContains(obj, onboardingConfig, "ProviderBtpReady", corev1.ConditionFalse, invalidProviderVersion),
+					wait.WithTimeout(3*time.Minute),
+				); err != nil {
+					t.Errorf("expected ProviderBtpReady=False with invalid provider version in message: %v", err)
+				}
+
+				if err := resources.DeleteObject(ctx, onboardingConfig, obj, wait.WithTimeout(5*time.Minute)); err != nil {
+					t.Errorf("failed to delete Crossplane resource: %v", err)
+				}
+				return ctx
+			},
+		).
+		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(5*time.Minute)))
+
+	testenv.Test(t, invalidProviderVersionTest.Feature())
+}
+
+func TestInvalidVersionRecovery(t *testing.T) {
+	invalidVersion := "9.99.99"
+	validVersion := "1.20.5"
+
+	recoveryTest := features.New("invalid version recovery test").
+		Setup(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			if _, err := resources.CreateObjectsFromDir(ctx, c, "platform"); err != nil {
+				t.Errorf("failed to create platform cluster objects: %v", err)
+			}
+			return ctx
+		}).
+		Setup(providers.CreateMCP(mcpName)).
+		Assess("create with invalid version and verify error",
+			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+				onboardingConfig, err := clusterutils.OnboardingConfig()
+				if err != nil {
+					t.Error(err)
+					return ctx
+				}
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "crossplane.services.openmcp.cloud",
+					Version: "v1alpha1",
+					Kind:    "Crossplane",
+				})
+				obj.SetName(mcpName)
+				obj.SetNamespace("default")
+				_ = unstructured.SetNestedField(obj.Object, invalidVersion, "spec", "version")
+
+				if err := onboardingConfig.Client().Resources().Create(ctx, obj); err != nil {
+					t.Errorf("failed to create Crossplane resource: %v", err)
+					return ctx
+				}
+
+				if err := wait.For(
+					conditionWithMessageContains(obj, onboardingConfig, "Reconciled", corev1.ConditionFalse, invalidVersion),
+					wait.WithTimeout(3*time.Minute),
+				); err != nil {
+					t.Errorf("expected Reconciled=False with available versions in message: %v", err)
+				}
+				return ctx
+			},
+		).
+		Assess("update to valid version and verify reconciliation succeeds",
+			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+				onboardingConfig, err := clusterutils.OnboardingConfig()
+				if err != nil {
+					t.Error(err)
+					return ctx
+				}
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "crossplane.services.openmcp.cloud",
+					Version: "v1alpha1",
+					Kind:    "Crossplane",
+				})
+				obj.SetName(mcpName)
+				obj.SetNamespace("default")
+
+				if err := onboardingConfig.Client().Resources().Get(ctx, obj.GetName(), obj.GetNamespace(), obj); err != nil {
+					t.Errorf("failed to get Crossplane resource: %v", err)
+					return ctx
+				}
+				_ = unstructured.SetNestedField(obj.Object, validVersion, "spec", "version")
+				if err := onboardingConfig.Client().Resources().Update(ctx, obj); err != nil {
+					t.Errorf("failed to update Crossplane resource: %v", err)
+					return ctx
+				}
+
+				if err := wait.For(
+					openmcpconditions.Match(obj, onboardingConfig, "Reconciled", corev1.ConditionTrue),
+					wait.WithTimeout(5*time.Minute),
+				); err != nil {
+					t.Errorf("expected Reconciled=True after updating to valid version: %v", err)
+				}
+				return ctx
+			},
+		).
+		Assess("ManagedControlPlane: crossplane deployment is available",
+			crossplaneDeploymentReady(mcpName),
+		).
+		Teardown(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			onboardingConfig, err := clusterutils.OnboardingConfig()
+			if err != nil {
+				t.Error(err)
+				return ctx
+			}
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   "crossplane.services.openmcp.cloud",
+				Version: "v1alpha1",
+				Kind:    "Crossplane",
+			})
+			obj.SetName(mcpName)
+			obj.SetNamespace("default")
+			if err := resources.DeleteObject(ctx, onboardingConfig, obj, wait.WithTimeout(5*time.Minute)); err != nil {
+				t.Errorf("failed to delete Crossplane resource: %v", err)
+			}
+			return ctx
+		}).
+		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(5*time.Minute)))
+
+	testenv.Test(t, recoveryTest.Feature())
+}
+
+func TestInvalidProviderVersionRecovery(t *testing.T) {
+	invalidProviderVersion := "v0.0.1"
+	validProviderVersion := "v1.9.0"
+
+	recoveryTest := features.New("invalid provider version recovery test").
+		Setup(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			if _, err := resources.CreateObjectsFromDir(ctx, c, "platform"); err != nil {
+				t.Errorf("failed to create platform cluster objects: %v", err)
+			}
+			return ctx
+		}).
+		Setup(providers.CreateMCP(mcpName)).
+		Assess("create with invalid provider version and verify error",
+			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+				onboardingConfig, err := clusterutils.OnboardingConfig()
+				if err != nil {
+					t.Error(err)
+					return ctx
+				}
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "crossplane.services.openmcp.cloud",
+					Version: "v1alpha1",
+					Kind:    "Crossplane",
+				})
+				obj.SetName(mcpName)
+				obj.SetNamespace("default")
+				_ = unstructured.SetNestedField(obj.Object, "1.20.5", "spec", "version")
+				_ = unstructured.SetNestedSlice(obj.Object, []interface{}{
+					map[string]interface{}{
+						"name":    providerBTPName,
+						"version": invalidProviderVersion,
+					},
+				}, "spec", "providers")
+
+				if err := onboardingConfig.Client().Resources().Create(ctx, obj); err != nil {
+					t.Errorf("failed to create Crossplane resource: %v", err)
+					return ctx
+				}
+
+				if err := wait.For(
+					conditionWithMessageContains(obj, onboardingConfig, "ProviderBtpReady", corev1.ConditionFalse, invalidProviderVersion),
+					wait.WithTimeout(3*time.Minute),
+				); err != nil {
+					t.Errorf("expected ProviderBtpReady=False with invalid provider version in message: %v", err)
+				}
+				return ctx
+			},
+		).
+		Assess("update to valid provider version and verify reconciliation succeeds",
+			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+				onboardingConfig, err := clusterutils.OnboardingConfig()
+				if err != nil {
+					t.Error(err)
+					return ctx
+				}
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "crossplane.services.openmcp.cloud",
+					Version: "v1alpha1",
+					Kind:    "Crossplane",
+				})
+				obj.SetName(mcpName)
+				obj.SetNamespace("default")
+
+				if err := onboardingConfig.Client().Resources().Get(ctx, obj.GetName(), obj.GetNamespace(), obj); err != nil {
+					t.Errorf("failed to get Crossplane resource: %v", err)
+					return ctx
+				}
+				_ = unstructured.SetNestedSlice(obj.Object, []interface{}{
+					map[string]interface{}{
+						"name":    providerBTPName,
+						"version": validProviderVersion,
+					},
+				}, "spec", "providers")
+				if err := onboardingConfig.Client().Resources().Update(ctx, obj); err != nil {
+					t.Errorf("failed to update Crossplane resource: %v", err)
+					return ctx
+				}
+
+				if err := wait.For(
+					openmcpconditions.Match(obj, onboardingConfig, "Reconciled", corev1.ConditionTrue),
+					wait.WithTimeout(5*time.Minute),
+				); err != nil {
+					t.Errorf("expected Reconciled=True after updating to valid provider version: %v", err)
+				}
+				return ctx
+			},
+		).
+		Assess("ManagedControlPlane: provider-btp is installed and healthy",
+			crossplaneProviderHealthy(mcpName, providerBTPName),
+		).
+		Teardown(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			onboardingConfig, err := clusterutils.OnboardingConfig()
+			if err != nil {
+				t.Error(err)
+				return ctx
+			}
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   "crossplane.services.openmcp.cloud",
+				Version: "v1alpha1",
+				Kind:    "Crossplane",
+			})
+			obj.SetName(mcpName)
+			obj.SetNamespace("default")
+			if err := resources.DeleteObject(ctx, onboardingConfig, obj, wait.WithTimeout(5*time.Minute)); err != nil {
+				t.Errorf("failed to delete Crossplane resource: %v", err)
+			}
+			return ctx
+		}).
+		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(5*time.Minute)))
+
+	testenv.Test(t, recoveryTest.Feature())
+}
+
 func conditionWithMessageContains(obj *unstructured.Unstructured, cfg *envconf.Config, conditionType string, conditionStatus corev1.ConditionStatus, substring string) kubewait.ConditionWithContextFunc {
 	return func(ctx context.Context) (bool, error) {
 		klog.Infof("waiting for condition %s=%s with message containing %q", conditionType, conditionStatus, substring)
