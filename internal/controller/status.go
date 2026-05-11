@@ -56,3 +56,20 @@ func smartRequeueConditional(rr ctrlutils.ReconcileResult[*v1alpha1.Crossplane])
 	}
 	return ctrlutils.SR_BACKOFF
 }
+
+func overrideCondition(conditions []metav1.Condition, condType string, status metav1.ConditionStatus, reason, message string) []metav1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == condType {
+			conditions[i].Status = status
+			conditions[i].Reason = reason
+			conditions[i].Message = message
+			return conditions
+		}
+	}
+	return append(conditions, metav1.Condition{
+		Type:    condType,
+		Status:  status,
+		Reason:  reason,
+		Message: message,
+	})
+}
