@@ -6,10 +6,10 @@ spec:
   versions:
     - version: "1.20.5"
       chart:
-        url: "ghcr.io/valentingerlach/charts-mirror/crossplane:1.20.5"
+        url: "ghcr.io/openmcp-project/service-provider-crossplane/e2e/crossplane:1.20.5"
   providers:
     availableProviders:
       - name: provider-btp
-        package: ghcr.io/sap/crossplane-provider-btp/crossplane/provider-btp
+        package: "ghcr.io/openmcp-project/service-provider-crossplane/e2e/provider-btp"
         versions:
-          - v1.9.0
+          - "v1.9.0"
