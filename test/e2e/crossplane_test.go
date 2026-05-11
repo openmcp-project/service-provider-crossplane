@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	kubewait "k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
@@ -150,5 +153,85 @@ func crossplaneProviderHealthy(mcpName, providerName string) features.Func {
 			t.Errorf("crossplane provider %s not healthy on MCP %s: %v", providerName, mcpName, err)
 		}
 		return ctx
+	}
+}
+
+func TestInvalidVersion(t *testing.T) {
+	invalidVersion := "9.99.99"
+
+	invalidVersionTest := features.New("invalid version test").
+		Setup(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			if _, err := resources.CreateObjectsFromDir(ctx, c, "platform"); err != nil {
+				t.Errorf("failed to create platform cluster objects: %v", err)
+			}
+			return ctx
+		}).
+		Setup(providers.CreateMCP(mcpName)).
+		Assess("verify error message contains available versions",
+			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+				onboardingConfig, err := clusterutils.OnboardingConfig()
+				if err != nil {
+					t.Error(err)
+					return ctx
+				}
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   "crossplane.services.openmcp.cloud",
+					Version: "v1alpha1",
+					Kind:    "Crossplane",
+				})
+				obj.SetName(mcpName)
+				obj.SetNamespace("default")
+				_ = unstructured.SetNestedField(obj.Object, invalidVersion, "spec", "version")
+
+				if err := onboardingConfig.Client().Resources().Create(ctx, obj); err != nil {
+					t.Errorf("failed to create Crossplane resource: %v", err)
+					return ctx
+				}
+
+				if err := wait.For(
+					conditionWithMessageContains(obj, onboardingConfig, "Reconciled", corev1.ConditionFalse, invalidVersion),
+					wait.WithTimeout(3*time.Minute),
+				); err != nil {
+					t.Errorf("expected Reconciled=False with available versions in message: %v", err)
+				}
+
+				if err := resources.DeleteObject(ctx, onboardingConfig, obj, wait.WithTimeout(2*time.Minute)); err != nil {
+					t.Errorf("failed to delete Crossplane resource: %v", err)
+				}
+				return ctx
+			},
+		).
+		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(5*time.Minute)))
+
+	testenv.Test(t, invalidVersionTest.Feature())
+}
+
+func conditionWithMessageContains(obj *unstructured.Unstructured, cfg *envconf.Config, conditionType string, conditionStatus corev1.ConditionStatus, substring string) kubewait.ConditionWithContextFunc {
+	return func(ctx context.Context) (bool, error) {
+		klog.Infof("waiting for condition %s=%s with message containing %q", conditionType, conditionStatus, substring)
+		if err := cfg.Client().Resources().Get(ctx, obj.GetName(), obj.GetNamespace(), obj); err != nil {
+			return false, nil
+		}
+		conditionsSlice, ok, err := unstructured.NestedSlice(obj.Object, "status", "conditions")
+		if err != nil || !ok {
+			return false, nil
+		}
+		for _, c := range conditionsSlice {
+			cond, ok := c.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if cond["type"] != conditionType {
+				continue
+			}
+			status, _ := cond["status"].(string)
+			message, _ := cond["message"].(string)
+			klog.Infof("condition %s: status=%s, message=%s", conditionType, status, message)
+			if status == string(conditionStatus) && strings.Contains(message, substring) {
+				return true, nil
+			}
+		}
+		return false, nil
 	}
 }

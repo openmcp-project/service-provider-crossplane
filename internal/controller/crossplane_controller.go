@@ -837,7 +837,6 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 	return func(componentName string, version string) (v1beta1.ComponentVersion, error) {
 		// Check if Crossplane is installable
 		if componentName == component.CrossplaneRelease {
-			// Check if available version matches the requested version
 			for _, availableVersion := range providerConfig.Spec.CrossplaneVersions {
 				if availableVersion.Version == version {
 					dockerRef := ""
@@ -851,13 +850,16 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 					}, nil
 				}
 			}
-			return v1beta1.ComponentVersion{}, errors.New("requested version not available")
+			available := make([]string, 0, len(providerConfig.Spec.CrossplaneVersions))
+			for _, v := range providerConfig.Spec.CrossplaneVersions {
+				available = append(available, v.Version)
+			}
+			return v1beta1.ComponentVersion{}, fmt.Errorf("requested version %q is not available, available versions: %v", version, available)
 		}
 
 		// Check if Provider is installable
 		for _, provider := range providerConfig.Spec.Providers.AvailableProviders {
 			if componentName == provider.Name {
-				// Provider exists, now lets check if version is available
 				for _, availableVersion := range provider.Versions {
 					if availableVersion == version {
 						return v1beta1.ComponentVersion{
@@ -866,9 +868,10 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 						}, nil
 					}
 				}
+				return v1beta1.ComponentVersion{}, fmt.Errorf("requested version %q for provider %q is not available, available versions: %v", version, componentName, provider.Versions)
 			}
 		}
-		return v1beta1.ComponentVersion{}, errors.New("requested version not available")
+		return v1beta1.ComponentVersion{}, fmt.Errorf("provider %q is not available in the ProviderConfig", componentName)
 	}
 }
 
