@@ -154,7 +154,6 @@ func (r *CrossplaneReconciler) doReconcile(ctx context.Context, req ctrl.Request
 	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: defaultProviderConfigName}, pc); err != nil {
 		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonProviderConfigNotFound, fmt.Sprintf("ProviderConfig '%s' not found: %v", defaultProviderConfigName, err))
 		rr.ReconcileError = errutils.WithReason(err, ReasonProviderConfigNotFound)
-		rr.SmartRequeue = ctrlutils.SR_RESET
 		r.Recorder.Eventf(xp, nil, corev1.EventTypeWarning, ReasonProviderConfigNotFound, "Reconcile", "ProviderConfig '%s' not found: %v", defaultProviderConfigName, err)
 		return
 	}
@@ -164,7 +163,6 @@ func (r *CrossplaneReconciler) doReconcile(ctx context.Context, req ctrl.Request
 	if err != nil {
 		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonReconciliationContextFailed, err.Error())
 		rr.ReconcileError = errutils.WithReason(err, ReasonReconciliationContextFailed)
-		rr.SmartRequeue = ctrlutils.SR_RESET
 		return
 	}
 
@@ -181,7 +179,6 @@ func (r *CrossplaneReconciler) doReconcile(ctx context.Context, req ctrl.Request
 	if err != nil {
 		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonClusterAccessFailed, err.Error())
 		rr.ReconcileError = errutils.WithReason(err, ReasonClusterAccessFailed)
-		rr.SmartRequeue = ctrlutils.SR_RESET
 		r.Recorder.Eventf(xp, nil, corev1.EventTypeWarning, ReasonClusterAccessFailed, "Reconcile", "Cluster access setup failed: %v", err)
 		return
 	}
@@ -197,7 +194,6 @@ func (r *CrossplaneReconciler) doReconcile(ctx context.Context, req ctrl.Request
 	if err != nil {
 		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonFluxKubeconfigFailed, err.Error())
 		rr.ReconcileError = errutils.WithReason(err, ReasonFluxKubeconfigFailed)
-		rr.SmartRequeue = ctrlutils.SR_RESET
 		return
 	}
 
@@ -217,20 +213,17 @@ func (r *CrossplaneReconciler) doReconcileComponents(ctx context.Context, mcpCli
 	// Add components finalizer
 	if err := r.ensureFinalizer(ctx, xp, FinalizerComponents); err != nil {
 		rr.ReconcileError = errutils.WithReason(fmt.Errorf("failed to add components finalizer: %w", err), ReasonFinalizerFailed)
-		rr.SmartRequeue = ctrlutils.SR_RESET
 		return
 	}
 	// Remove legacy finalizer
 	if err := r.removeFinalizer(ctx, xp, FinalizerLegacy); err != nil {
 		rr.ReconcileError = errutils.WithReason(fmt.Errorf("failed to remove legacy finalizer: %w", err), ReasonFinalizerFailed)
-		rr.SmartRequeue = ctrlutils.SR_RESET
 		return
 	}
 
 	componentConditions, err := r.createOrUpdateCrossplaneInstance(ctx, mcpClient, xp, pc)
 	if err != nil {
 		rr.ReconcileError = errutils.WithReason(err, ReasonComponentReconcileFailed)
-		rr.SmartRequeue = ctrlutils.SR_RESET
 		rr.Conditions = overrideCondition(rr.Conditions, ConditionTypeReconciled, metav1.ConditionFalse, ReasonComponentBuildFailed, err.Error())
 		r.Recorder.Eventf(xp, nil, corev1.EventTypeWarning, ReasonComponentReconcileFailed, "Reconcile", "Failed to reconcile components: %v", err)
 		return
@@ -272,7 +265,6 @@ func (r *CrossplaneReconciler) doDeleteComponents(ctx context.Context, mcpClient
 	}
 	if err != nil {
 		rr.ReconcileError = errutils.WithReason(err, ReasonDeletionComponentCleanupError)
-		rr.SmartRequeue = ctrlutils.SR_RESET
 		rr.Conditions = overrideCondition(rr.Conditions, ConditionTypeReconciled, metav1.ConditionFalse, ReasonDeletionComponentCleanupError, err.Error())
 		r.Recorder.Eventf(xp, nil, corev1.EventTypeWarning, ReasonDeletionComponentCleanupError, "Delete", "Failed to delete components: %v", err)
 		return
@@ -281,7 +273,6 @@ func (r *CrossplaneReconciler) doDeleteComponents(ctx context.Context, mcpClient
 	// Remove components finalizer
 	if err := r.removeFinalizer(ctx, xp, FinalizerComponents); err != nil {
 		rr.ReconcileError = errutils.WithReason(fmt.Errorf("failed to remove components finalizer: %w", err), ReasonFinalizerFailed)
-		rr.SmartRequeue = ctrlutils.SR_RESET
 		return
 	}
 
