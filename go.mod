@@ -8,7 +8,7 @@ replace sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.22.5
 
 require (
 	github.com/crossplane/crossplane v1.20.5
-	github.com/crossplane/crossplane-runtime v1.20.0
+	github.com/crossplane/crossplane-runtime v1.20.8
 	github.com/fluxcd/helm-controller/api v1.5.3
 	github.com/fluxcd/kustomize-controller/api v1.8.5
 	github.com/fluxcd/pkg/apis/meta v1.26.0
