@@ -29,8 +29,5 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build test image
-        run: task build:img:build-test
-
       - name: Run e2e tests
         run: task test-e2e
