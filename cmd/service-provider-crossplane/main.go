@@ -371,7 +371,7 @@ func runCommand(cmd *cobra.Command, _ []string) error {
 	crossplaneReconciler := &controller.CrossplaneReconciler{
 		PlatformCluster:      platformCluster,
 		OnboardingCluster:    onboardingCluster,
-		Recorder:             mgr.GetEventRecorderFor("sp-crossplane-controller"),
+		Recorder:             mgr.GetEventRecorder("sp-crossplane-controller"),
 		RecieveEventsChannel: reconcileEventsCh,
 		SecretsNamespace:     os.Getenv(openmcpconstv1alpha1.EnvVariablePodNamespace),
 	}

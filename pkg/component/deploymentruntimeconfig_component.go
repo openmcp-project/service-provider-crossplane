@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	crossplanev1beta1 "github.com/crossplane/crossplane/apis/pkg/v1beta1"
+	crossplanev1beta1 "github.com/crossplane/crossplane/v2/apis/pkg/v1beta1"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"k8s.io/apimachinery/pkg/types"
