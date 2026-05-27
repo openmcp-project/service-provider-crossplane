@@ -421,7 +421,7 @@ func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context,
 	return conditions, nil
 }
 
-func (r *CrossplaneReconciler) deleteComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, comps []juggler.Component, skipKeepOnUninstall bool) ([]metav1.Condition, bool, error) {
+func (r *CrossplaneReconciler) deleteComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, comps []juggler.Component, ignoreKeepOnUninstall bool) ([]metav1.Condition, bool, error) {
 	j, err := r.newJuggler(ctx, mcpClient, xp, comps)
 	if err != nil {
 		return nil, false, err
@@ -430,7 +430,7 @@ func (r *CrossplaneReconciler) deleteComponents(ctx context.Context, mcpClient c
 
 	anyRemaining := false
 	for _, cr := range result {
-		if skipKeepOnUninstall {
+		if ignoreKeepOnUninstall {
 			if kou, ok := cr.Component.(juggler.KeepOnUninstall); ok && kou.KeepOnUninstall() {
 				continue
 			}
