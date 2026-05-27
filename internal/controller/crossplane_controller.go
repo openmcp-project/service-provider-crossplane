@@ -260,7 +260,7 @@ func (r *CrossplaneReconciler) doDeleteComponents(ctx context.Context, mcpClient
 	if errors.Is(err, errComponentRemaining) {
 		log.Info(err.Error())
 		rr.Conditions = overrideCondition(rr.Conditions, ConditionTypeReconciled, metav1.ConditionFalse, ReasonDeletionInProgress, "Deleting components")
-		rr.SmartRequeue = ctrlutils.SR_RESET
+		rr.SmartRequeue = ctrlutils.SR_BACKOFF
 		return
 	}
 	if err != nil {
@@ -805,10 +805,10 @@ func (r *CrossplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		SkipWorkloadCluster()
 
 	// Initialize smart requeue store with sensible defaults:
-	// - Min interval: 5 seconds (quick retry for transient issues)
+	// - Min interval: 1 seconds (quick retry for transient issues)
 	// - Max interval: 5 minutes (cap on maximum wait time)
-	// - Multiplier: 2.0 (exponential backoff with doubling)
-	r.RequeueStore = smartrequeue.NewStore(5*time.Second, 5*time.Minute, 2.0)
+	// - Multiplier: 1.3 (exponential backoff)
+	r.RequeueStore = smartrequeue.NewStore(1*time.Second, 5*time.Minute, 1.3)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Crossplane{}).
