@@ -20,6 +20,7 @@ import (
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // AvailableCrossplaneProvider represents configuration for Crossplane providers in a ProviderConfig of the Service Provider Crossplane.
@@ -138,5 +139,8 @@ type ProviderConfigList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&ProviderConfig{}, &ProviderConfigList{})
+	SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(GroupVersion, &ProviderConfig{}, &ProviderConfigList{})
+		return nil
+	})
 }
