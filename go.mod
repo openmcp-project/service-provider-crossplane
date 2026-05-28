@@ -8,7 +8,7 @@ require (
 	github.com/fluxcd/helm-controller/api v1.5.5
 	github.com/fluxcd/kustomize-controller/api v1.8.5
 	github.com/fluxcd/pkg/apis/meta v1.26.0
-	github.com/fluxcd/source-controller/api v1.8.3
+	github.com/fluxcd/source-controller/api v1.8.5
 	github.com/go-logr/logr v1.4.3
 	github.com/openmcp-project/control-plane-operator v0.3.0
 	github.com/openmcp-project/controller-utils v0.29.0
