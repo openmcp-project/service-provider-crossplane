@@ -19,6 +19,7 @@ package v1alpha1
 import (
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // CrossplaneProviderConfig represents configuration for Crossplane providers in a Crossplane instance.
@@ -78,5 +79,8 @@ type CrossplaneList struct {
 }
 
 func init() {
-	SchemeBuilder.Register(&Crossplane{}, &CrossplaneList{})
+	SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(GroupVersion, &Crossplane{}, &CrossplaneList{})
+		return nil
+	})
 }
