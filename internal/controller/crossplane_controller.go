@@ -223,7 +223,7 @@ func (r *CrossplaneReconciler) doReconcileComponents(ctx context.Context, mcpCli
 
 	componentConditions, err := r.createOrUpdateCrossplaneInstance(ctx, mcpClient, xp, pc)
 	if err != nil {
-		rr.ReconcileError = errutils.WithReason(err, ReasonComponentReconcileFailed)
+		rr.ReconcileError = errutils.WithReason(errutils.IgnoreInvalidUserInput(err), ReasonComponentReconcileFailed)
 		rr.Conditions = overrideCondition(rr.Conditions, ConditionTypeReconciled, metav1.ConditionFalse, ReasonComponentBuildFailed, err.Error())
 		r.Recorder.Eventf(xp, nil, corev1.EventTypeWarning, ReasonComponentReconcileFailed, "Reconcile", "Failed to reconcile components: %v", err)
 		return
@@ -755,7 +755,7 @@ func extractHelmChartPullSecretForVersion(targetVersion string, xpversions []v1a
 	for _, v := range xpversions {
 		available = append(available, v.Version)
 	}
-	return nil, fmt.Errorf("requested version %q is not available, available versions: %v", targetVersion, available)
+	return nil, fmt.Errorf("%w: requested version %q is not available, available versions: %v", errutils.ErrInvalidUserInput, targetVersion, available)
 }
 
 func discoverCrossplaneImagePullSecrets(spec v1alpha1.CrossplaneSpec, xpversions []v1alpha1.CrossplaneVersion) []commonapi.LocalObjectReference {
@@ -922,7 +922,7 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 			for _, v := range providerConfig.Spec.CrossplaneVersions {
 				available = append(available, v.Version)
 			}
-			return v1beta1.ComponentVersion{}, fmt.Errorf("requested version %q is not available, available versions: %v", version, available)
+			return v1beta1.ComponentVersion{}, fmt.Errorf("%w: requested version %q is not available, available versions: %v", errutils.ErrInvalidUserInput, version, available)
 		}
 
 		// Check if Provider is installable
@@ -936,10 +936,10 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 						}, nil
 					}
 				}
-				return v1beta1.ComponentVersion{}, fmt.Errorf("requested version %q for provider %q is not available, available versions: %v", version, componentName, provider.Versions)
+				return v1beta1.ComponentVersion{}, fmt.Errorf("%w: requested version %q for provider %q is not available, available versions: %v", errutils.ErrInvalidUserInput, version, componentName, provider.Versions)
 			}
 		}
-		return v1beta1.ComponentVersion{}, fmt.Errorf("provider %q is not available in the ProviderConfig", componentName)
+		return v1beta1.ComponentVersion{}, fmt.Errorf("%w: provider %q is not available in the ProviderConfig", errutils.ErrInvalidUserInput, componentName)
 	}
 }
 
