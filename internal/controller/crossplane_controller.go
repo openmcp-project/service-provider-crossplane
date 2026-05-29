@@ -61,7 +61,7 @@ import (
 	"github.com/openmcp-project/service-provider-crossplane/pkg/crossplane"
 	sputils "github.com/openmcp-project/service-provider-crossplane/pkg/utils"
 
-	crossplanev1beta1 "github.com/crossplane/crossplane/v2/apis/pkg/v1beta1"
+	crossplanev1beta1 "github.com/crossplane/crossplane/apis/v2/pkg/v1beta1"
 	"github.com/openmcp-project/control-plane-operator/pkg/controlplane/components"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler/fluxcd"

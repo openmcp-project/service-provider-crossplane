@@ -4,7 +4,7 @@ package component
 import (
 	"testing"
 
-	crossplanev1beta1 "github.com/crossplane/crossplane/v2/apis/pkg/v1beta1"
+	crossplanev1beta1 "github.com/crossplane/crossplane/apis/v2/pkg/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
