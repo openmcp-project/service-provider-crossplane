@@ -403,7 +403,7 @@ replace (
 	// Renamed from ThalesIgnite to ThalesGroup; old versions still declare the old path,
 	// causing a path mismatch. Required by ocm.software/ocm (transitive via control-plane-operator)
 	// through sigstore/cosign.
-	github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.0
+	github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.1
 
 	// v0.67–v0.71 import k8s.io/api/autoscaling/v2beta2 which was removed in k8s.io/api v0.36.
 	// Upgrade to v0.74.0 which dropped that import.
