@@ -28,6 +28,7 @@ import (
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
+	errutils "github.com/openmcp-project/controller-utils/pkg/errors"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -663,6 +664,58 @@ func Test_buildComponents(t *testing.T) {
 					t.Errorf("buildComponents() element %d not found in expected: %v", i, gotComponent)
 				}
 			}
+		})
+	}
+}
+
+func Test_extractHelmChartPullSecretForVersion(t *testing.T) {
+	versions := []v1alpha1.CrossplaneVersion{
+		{Version: "v1.0.0", Chart: v1alpha1.ChartSpec{SecretRef: commonapi.LocalObjectReference{Name: "secret-1"}}},
+		{Version: "v2.0.0", Chart: v1alpha1.ChartSpec{SecretRef: commonapi.LocalObjectReference{Name: "secret-2"}}},
+	}
+
+	_, err := extractHelmChartPullSecretForVersion("v3.0.0", versions)
+	assert.Error(t, err)
+	assert.Nil(t, errutils.IgnoreInvalidUserInput(err), "unsupported version error should be treated as invalid user input")
+}
+
+func Test_GetResolverFunc(t *testing.T) {
+	pc := &v1alpha1.ProviderConfig{
+		Spec: v1alpha1.ProviderConfigSpec{
+			CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+				{Version: "v1.0.0", Chart: v1alpha1.ChartSpec{URL: "oci://charts/crossplane:v1.0.0"}},
+			},
+			Providers: v1alpha1.CrossplaneProviders{
+				AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
+					{Name: "provider-aws", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws"},
+				},
+			},
+		},
+	}
+	r := &CrossplaneReconciler{}
+	resolve := r.GetResolverFunc(pc)
+
+	tests := []struct {
+		name          string
+		componentName string
+		version       string
+		wantErr       bool
+	}{
+		{"valid crossplane version", component.CrossplaneRelease, "v1.0.0", false},
+		{"unsupported crossplane version", component.CrossplaneRelease, "v9.9.9", true},
+		{"valid provider version", "provider-aws", "v0.1.0", false},
+		{"unsupported provider version", "provider-aws", "v9.9.9", true},
+		{"unknown provider", "provider-unknown", "v0.1.0", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := resolve(tt.componentName, tt.version)
+			if !tt.wantErr {
+				assert.NoError(t, err)
+				return
+			}
+			assert.Error(t, err)
+			assert.Nil(t, errutils.IgnoreInvalidUserInput(err), "version resolver error should be treated as invalid user input")
 		})
 	}
 }
