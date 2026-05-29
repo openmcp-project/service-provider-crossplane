@@ -51,12 +51,13 @@ spec:
 ### Configure a `ProviderConfig`
 A `ProviderConfig` is an API where you can configure an allow-list of Crossplane and provider installations in your `ManagedControlPlane`.
 The `ProviderConfig` is stored in the Platform cluster and therefore in the responsibility realm of the platform owner.
+The name of the `ProviderConfig` must match the `--provider-name` argument that is passed to the service provider crossplane operator.
 
 ```yaml
 apiVersion: crossplane.services.openmcp.cloud/v1alpha1
 kind: ProviderConfig
 metadata:
-  name: default
+  name: crossplane
 spec:
   versions:
     - version: v2.0.2

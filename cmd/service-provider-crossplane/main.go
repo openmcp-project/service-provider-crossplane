@@ -220,6 +220,7 @@ func runCommand(cmd *cobra.Command, _ []string) error {
 	probeAddr, _ := cmd.Flags().GetString("health-probe-bind-address")
 	secureMetrics, _ := cmd.Flags().GetBool("metrics-secure")
 	enableHTTP2, _ := cmd.Flags().GetBool("enable-http2")
+	providerName, _ := cmd.Flags().GetString("provider-name")
 
 	var tlsOpts []func(*tls.Config)
 
@@ -374,6 +375,7 @@ func runCommand(cmd *cobra.Command, _ []string) error {
 		Recorder:             mgr.GetEventRecorder("sp-crossplane-controller"),
 		RecieveEventsChannel: reconcileEventsCh,
 		SecretsNamespace:     os.Getenv(openmcpconstv1alpha1.EnvVariablePodNamespace),
+		ProviderName:         providerName,
 	}
 	if err := crossplaneReconciler.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create controller Crossplane: %w", err)
