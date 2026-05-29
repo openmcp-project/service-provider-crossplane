@@ -43,6 +43,8 @@ import (
 	"github.com/openmcp-project/service-provider-crossplane/pkg/component"
 )
 
+const TestProviderName = "crossplane-test"
+
 func TestDeduplicateSecretRefs(t *testing.T) {
 	testCases := []struct {
 		desc     string
@@ -861,7 +863,7 @@ func Test_mapSecretToRequests(t *testing.T) {
 			},
 			providerConfig: &v1alpha1.ProviderConfig{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: defaultProviderConfigName,
+					Name: TestProviderName,
 				},
 				Spec: v1alpha1.ProviderConfigSpec{
 					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
@@ -897,7 +899,7 @@ func Test_mapSecretToRequests(t *testing.T) {
 			},
 			providerConfig: &v1alpha1.ProviderConfig{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: defaultProviderConfigName,
+					Name: TestProviderName,
 				},
 				Spec: v1alpha1.ProviderConfigSpec{
 					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
@@ -927,7 +929,7 @@ func Test_mapSecretToRequests(t *testing.T) {
 			},
 			providerConfig: &v1alpha1.ProviderConfig{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: defaultProviderConfigName,
+					Name: TestProviderName,
 				},
 				Spec: v1alpha1.ProviderConfigSpec{
 					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
@@ -953,7 +955,7 @@ func Test_mapSecretToRequests(t *testing.T) {
 			},
 			providerConfig: &v1alpha1.ProviderConfig{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: defaultProviderConfigName,
+					Name: TestProviderName,
 				},
 				Spec: v1alpha1.ProviderConfigSpec{
 					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
@@ -999,6 +1001,7 @@ func Test_mapSecretToRequests(t *testing.T) {
 			r := &CrossplaneReconciler{
 				PlatformCluster:   clusters.NewTestClusterFromClient("platform", platformClient),
 				OnboardingCluster: clusters.NewTestClusterFromClient("onboarding", onboardingClient),
+				ProviderName:      TestProviderName,
 			}
 
 			got := r.mapSecretToRequests(context.Background(), tt.secret)
@@ -1034,6 +1037,7 @@ func Test_mapSecretToRequests_providerConfigNotFound(t *testing.T) {
 	r := &CrossplaneReconciler{
 		PlatformCluster:   clusters.NewTestClusterFromClient("platform", platformClient),
 		OnboardingCluster: clusters.NewTestClusterFromClient("onboarding", onboardingClient),
+		ProviderName:      TestProviderName,
 	}
 
 	secret := &corev1.Secret{

@@ -83,9 +83,8 @@ var (
 )
 
 const (
-	requestSuffixMCP          = "--mcp"
-	defaultProviderConfigName = "default"
-	secretNamePrefix          = "sp-crossplane-"
+	requestSuffixMCP = "--mcp"
+	secretNamePrefix = "sp-crossplane-"
 )
 
 // CrossplaneReconciler reconciles a Crossplane object
@@ -97,6 +96,7 @@ type CrossplaneReconciler struct {
 	RequeueStore            *smartrequeue.Store
 	RecieveEventsChannel    <-chan event.GenericEvent
 	SecretsNamespace        string
+	ProviderName            string
 }
 
 // Reconcile reconciles the Crossplane instance.
@@ -151,10 +151,10 @@ func (r *CrossplaneReconciler) doReconcile(ctx context.Context, req ctrl.Request
 
 	// Get ProviderConfig from Platform cluster
 	pc := &v1alpha1.ProviderConfig{}
-	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: defaultProviderConfigName}, pc); err != nil {
-		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonProviderConfigNotFound, fmt.Sprintf("ProviderConfig '%s' not found: %v", defaultProviderConfigName, err))
+	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: r.ProviderName}, pc); err != nil {
+		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonProviderConfigNotFound, fmt.Sprintf("ProviderConfig '%s' not found: %v", r.ProviderName, err))
 		rr.ReconcileError = errutils.WithReason(err, ReasonProviderConfigNotFound)
-		r.Recorder.Eventf(xp, nil, corev1.EventTypeWarning, ReasonProviderConfigNotFound, "Reconcile", "ProviderConfig '%s' not found: %v", defaultProviderConfigName, err)
+		r.Recorder.Eventf(xp, nil, corev1.EventTypeWarning, ReasonProviderConfigNotFound, "Reconcile", "ProviderConfig '%s' not found: %v", r.ProviderName, err)
 		return
 	}
 
@@ -830,7 +830,7 @@ func (r *CrossplaneReconciler) mapSecretToRequests(ctx context.Context, secret *
 	log := log.FromContext(ctx)
 
 	providerConfig := &v1alpha1.ProviderConfig{}
-	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: defaultProviderConfigName}, providerConfig); err != nil {
+	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: r.ProviderName}, providerConfig); err != nil {
 		log.Error(err, "failed to get ProviderConfig while mapping secret")
 		return nil
 	}
