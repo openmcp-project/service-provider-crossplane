@@ -6,9 +6,9 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.20.1
   labels:
     openmcp.cloud/cluster: platform
-  name: providerconfigs.crossplane.services.openmcp.cloud
+  name: providerconfigs.crossplane.services.open-control-plane.io
 spec:
-  group: crossplane.services.openmcp.cloud
+  group: crossplane.services.open-control-plane.io
   names:
     kind: ProviderConfig
     listKind: ProviderConfigList
