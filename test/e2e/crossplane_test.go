@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -176,7 +177,7 @@ func TestInvalidVersion(t *testing.T) {
 				}
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   "crossplane.services.openmcp.cloud",
+					Group:   v1alpha1.GroupVersion.String(),
 					Version: "v1alpha1",
 					Kind:    "Crossplane",
 				})
@@ -227,7 +228,7 @@ func TestInvalidProviderVersion(t *testing.T) {
 				}
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   "crossplane.services.openmcp.cloud",
+					Group:   v1alpha1.GroupVersion.String(),
 					Version: "v1alpha1",
 					Kind:    "Crossplane",
 				})
@@ -285,7 +286,7 @@ func TestInvalidVersionRecovery(t *testing.T) {
 				}
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   "crossplane.services.openmcp.cloud",
+					Group:   v1alpha1.GroupVersion.String(),
 					Version: "v1alpha1",
 					Kind:    "Crossplane",
 				})
@@ -316,7 +317,7 @@ func TestInvalidVersionRecovery(t *testing.T) {
 				}
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   "crossplane.services.openmcp.cloud",
+					Group:   v1alpha1.GroupVersion.String(),
 					Version: "v1alpha1",
 					Kind:    "Crossplane",
 				})
@@ -353,7 +354,7 @@ func TestInvalidVersionRecovery(t *testing.T) {
 			}
 			obj := &unstructured.Unstructured{}
 			obj.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   "crossplane.services.openmcp.cloud",
+				Group:   v1alpha1.GroupVersion.String(),
 				Version: "v1alpha1",
 				Kind:    "Crossplane",
 			})
@@ -390,7 +391,7 @@ func TestInvalidProviderVersionRecovery(t *testing.T) {
 				}
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   "crossplane.services.openmcp.cloud",
+					Group:   v1alpha1.GroupVersion.String(),
 					Version: "v1alpha1",
 					Kind:    "Crossplane",
 				})
@@ -427,7 +428,7 @@ func TestInvalidProviderVersionRecovery(t *testing.T) {
 				}
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   "crossplane.services.openmcp.cloud",
+					Group:   v1alpha1.GroupVersion.String(),
 					Version: "v1alpha1",
 					Kind:    "Crossplane",
 				})
@@ -469,7 +470,7 @@ func TestInvalidProviderVersionRecovery(t *testing.T) {
 			}
 			obj := &unstructured.Unstructured{}
 			obj.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   "crossplane.services.openmcp.cloud",
+				Group:   v1alpha1.GroupVersion.String(),
 				Version: "v1alpha1",
 				Kind:    "Crossplane",
 			})
