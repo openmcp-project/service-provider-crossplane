@@ -177,8 +177,8 @@ func TestInvalidVersion(t *testing.T) {
 				}
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   v1alpha1.GroupVersion.String(),
-					Version: "v1alpha1",
+					Group:   v1alpha1.GroupVersion.Group,
+					Version: v1alpha1.GroupVersion.Version,
 					Kind:    "Crossplane",
 				})
 				obj.SetName(mcpName)
@@ -228,8 +228,8 @@ func TestInvalidProviderVersion(t *testing.T) {
 				}
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   v1alpha1.GroupVersion.String(),
-					Version: "v1alpha1",
+					Group:   v1alpha1.GroupVersion.Group,
+					Version: v1alpha1.GroupVersion.Version,
 					Kind:    "Crossplane",
 				})
 				obj.SetName(mcpName)
@@ -286,8 +286,8 @@ func TestInvalidVersionRecovery(t *testing.T) {
 				}
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   v1alpha1.GroupVersion.String(),
-					Version: "v1alpha1",
+					Group:   v1alpha1.GroupVersion.Group,
+					Version: v1alpha1.GroupVersion.Version,
 					Kind:    "Crossplane",
 				})
 				obj.SetName(mcpName)
@@ -317,8 +317,8 @@ func TestInvalidVersionRecovery(t *testing.T) {
 				}
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   v1alpha1.GroupVersion.String(),
-					Version: "v1alpha1",
+					Group:   v1alpha1.GroupVersion.Group,
+					Version: v1alpha1.GroupVersion.Version,
 					Kind:    "Crossplane",
 				})
 				obj.SetName(mcpName)
@@ -354,8 +354,8 @@ func TestInvalidVersionRecovery(t *testing.T) {
 			}
 			obj := &unstructured.Unstructured{}
 			obj.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   v1alpha1.GroupVersion.String(),
-				Version: "v1alpha1",
+				Group:   v1alpha1.GroupVersion.Group,
+				Version: v1alpha1.GroupVersion.Version,
 				Kind:    "Crossplane",
 			})
 			obj.SetName(mcpName)
@@ -391,8 +391,8 @@ func TestInvalidProviderVersionRecovery(t *testing.T) {
 				}
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   v1alpha1.GroupVersion.String(),
-					Version: "v1alpha1",
+					Group:   v1alpha1.GroupVersion.Group,
+					Version: v1alpha1.GroupVersion.Version,
 					Kind:    "Crossplane",
 				})
 				obj.SetName(mcpName)
@@ -428,8 +428,8 @@ func TestInvalidProviderVersionRecovery(t *testing.T) {
 				}
 				obj := &unstructured.Unstructured{}
 				obj.SetGroupVersionKind(schema.GroupVersionKind{
-					Group:   v1alpha1.GroupVersion.String(),
-					Version: "v1alpha1",
+					Group:   v1alpha1.GroupVersion.Group,
+					Version: v1alpha1.GroupVersion.Version,
 					Kind:    "Crossplane",
 				})
 				obj.SetName(mcpName)
@@ -470,8 +470,8 @@ func TestInvalidProviderVersionRecovery(t *testing.T) {
 			}
 			obj := &unstructured.Unstructured{}
 			obj.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   v1alpha1.GroupVersion.String(),
-				Version: "v1alpha1",
+				Group:   v1alpha1.GroupVersion.Group,
+				Version: v1alpha1.GroupVersion.Version,
 				Kind:    "Crossplane",
 			})
 			obj.SetName(mcpName)
