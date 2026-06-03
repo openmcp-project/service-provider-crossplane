@@ -80,6 +80,10 @@ var (
 	FinalizerAccess = v1alpha1.GroupVersion.Group + "/mcp-access"
 
 	controllerName = v1alpha1.GroupVersion.Group
+	// TODO: In order to avoid issues during the api group change with existing instances,
+	// the name of the cluster access reconciler needs to stay the same.
+	// This should be changed when there will be a solution for this.
+	clusterAccessReconcilerName = "crossplane.services.openmcp.cloud"
 )
 
 const (
@@ -796,7 +800,7 @@ func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, log
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *CrossplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.ClusterAccessReconciler = clusteraccess.NewClusterAccessReconciler(r.PlatformCluster.Client(), controllerName)
+	r.ClusterAccessReconciler = clusteraccess.NewClusterAccessReconciler(r.PlatformCluster.Client(), clusterAccessReconcilerName)
 	r.ClusterAccessReconciler.
 		WithMCPScheme(scheme.MCP).
 		WithRetryInterval(10 * time.Second).
