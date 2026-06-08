@@ -548,19 +548,15 @@ func Test_buildComponents(t *testing.T) {
 												Name: "package-runtime",
 												VolumeMounts: []corev1.VolumeMount{
 													{
-														MountPath: "/etc/custom-ca",
+														MountPath: "/etc/open-control-plane/custom-ca",
 														Name:      "custom-ca-bundle",
 														ReadOnly:  true,
 													},
 												},
 												Env: []corev1.EnvVar{
 													{
-														Name:  "SSL_CERT_FILE",
-														Value: "/etc/custom-ca/ca-bundle.crt",
-													},
-													{
 														Name:  "SSL_CERT_DIR",
-														Value: "/etc/custom-ca",
+														Value: "/etc/ssl/certs:/etc/pki/tls/certs:/etc/open-control-plane/custom-ca",
 													},
 												},
 											},
@@ -572,6 +568,12 @@ func Test_buildComponents(t *testing.T) {
 													ConfigMap: &corev1.ConfigMapVolumeSource{
 														LocalObjectReference: corev1.LocalObjectReference{
 															Name: "custom-ca-bundle",
+														},
+														Items: []corev1.KeyToPath{
+															{
+																Key:  "ca-bundle.crt",
+																Path: "ca-bundle.crt",
+															},
 														},
 													},
 												},
