@@ -26,7 +26,7 @@ Service provider Crossplane manages the lifecycle of Crossplane instances and Cr
 ## 🏗️ Installation of the Service Provider Crossplane
 
 ### Local Development
-To run the service-provider-crossplane locally, you need to first bootstrap an openMCP environment by using [openmcp-operator](https://github.com/openmcp-project/openmcp-operator) and [cluster-provider-kind](https://github.com/openmcp-project/cluster-provider-kind). A comprehensive guide will follow soon.
+To run the service-provider-crossplane locally, you need to first bootstrap an OpenControlPlane environment by using [openmcp-operator](https://github.com/openmcp-project/openmcp-operator) and [cluster-provider-kind](https://github.com/openmcp-project/cluster-provider-kind). A comprehensive guide will follow soon.
 
 For current testing reasons, the service-provider-crossplane needs to run in the cluster. To run the latest version of your changes in your local environment, you need to run:
 
@@ -51,8 +51,8 @@ spec:
   image: ghcr.io/openmcp-project/images/service-provider-crossplane:... # latest local docker image build
 ```
 
-### OpenMCP Landscape
-When you already have an openMCP environment set up, you can deploy the service-provider-crossplane by applying the following manifest:
+### OpenControlPlane Landscape
+When you already have an OpenControlPlane environment set up, you can deploy the service-provider-crossplane by applying the following manifest:
 
 ```yaml
 apiVersion: openmcp.cloud/v1alpha1
