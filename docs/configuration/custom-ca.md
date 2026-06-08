@@ -17,7 +17,7 @@ The `CABundleRef` property in the `ProviderConfig` allows you to configure custo
 The `caBundleRef` field is an optional reference to a Kubernetes ConfigMap containing your custom CA certificate bundle:
 
 ```yaml
-apiVersion: crossplane.services.openmcp.cloud/v1alpha1
+apiVersion: crossplane.services.open-control-plane.io/v1alpha1
 kind: ProviderConfig
 metadata:
   name: default

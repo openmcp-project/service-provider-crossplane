@@ -54,7 +54,7 @@ The `ProviderConfig` is stored in the Platform cluster and therefore in the resp
 The name of the `ProviderConfig` must match the `--provider-name` argument that is passed to the service provider crossplane operator.
 
 ```yaml
-apiVersion: crossplane.services.openmcp.cloud/v1alpha1
+apiVersion: crossplane.services.open-control-plane.io/v1alpha1
 kind: ProviderConfig
 metadata:
   name: crossplane
@@ -97,7 +97,7 @@ NOTE: `ProvierConfig.spec.versions[].chart.url` needs to be image URL to an OCI 
 ### Install a Crossplane instance
 
 ```yaml
-apiVersion: crossplane.services.openmcp.cloud/v1alpha1
+apiVersion: crossplane.services.open-control-plane.io/v1alpha1
 kind: Crossplane
 metadata:
   name: crossplane-sample

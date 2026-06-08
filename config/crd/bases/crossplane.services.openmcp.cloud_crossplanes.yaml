@@ -8,7 +8,7 @@ metadata:
     openmcp.cloud/cluster: onboarding
   name: crossplanes.crossplane.services.openmcp.cloud
 spec:
-  group: crossplane.services.openmcp.cloud
+  group: crossplane.services.open-control-plane.io
   names:
     kind: Crossplane
     listKind: CrossplaneList

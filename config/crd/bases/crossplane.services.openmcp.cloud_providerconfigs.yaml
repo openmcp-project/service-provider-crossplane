@@ -8,7 +8,7 @@ metadata:
     openmcp.cloud/cluster: platform
   name: providerconfigs.crossplane.services.openmcp.cloud
 spec:
-  group: crossplane.services.openmcp.cloud
+  group: crossplane.services.open-control-plane.io
   names:
     kind: ProviderConfig
     listKind: ProviderConfigList
