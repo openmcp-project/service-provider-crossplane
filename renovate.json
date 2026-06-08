@@ -17,7 +17,7 @@
   "packageRules": [
     {
       "description": "Group openmcp-project/build submodule and workflow updates",
-      "matchPackageNames": [
+      "matchDepNames": [
         "hack/common",
         "openmcp-project/build"
       ],
