@@ -2,6 +2,23 @@
 
 # service-provider-crossplane
 
+## Quality Criteria
+
+[![Quality: Incubating](https://img.shields.io/badge/Quality-Incubating-3d9970?style=flat-square&labelColor=555)](https://open-control-plane.io/developers/serviceprovider/quality-criteria)
+
+| Criterion                         | Status  | Notes                                                                                                                                                                                                                                                                       |
+| --------------------------------- | :----:  | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deletion behaviour                |   ⚠️    | A finalizer ensures the Service Provider managed resources like Flux' `OCIRepository` and `HelmRelease` are cleaned-up. But there is no behaviour that ensures deletion is blocked if custom resources (aka Crossplane `ManagedResources`) in a `ControlPlane` still exist. |
+| Status reporting & error messages |   ✅    |                                                                                                                                                                                                                                                                             |
+| Operation annotations             |   ❌    | `openmcp.cloud/operation` (pause / force-reconcile) annotations are not honoured.                                                                                                                                                                                           |
+| API stability policy              |   ✅    |                                                                                                                                                                                                                                                                             |
+| Custom CA support                 |   ✅    |                                                                                                                                                                                                                                                                             |
+| Release artifacts (image + OCM)   |   ✅    |                                                                                                                                                                                                                                                                             |
+| Testing                           |   ✅    |                                                                                                                                                                                                                                                                             |
+| Ownership and maintenance docs    |   ✅    |                                                                                                                                                                                                                                                                             |
+
+See the [OpenControlPlane Quality Criteria](https://open-control-plane.io/developers/serviceprovider/quality-criteria) for definitions.
+
 ## About this project
 
 Service provider Crossplane manages the lifecycle of Crossplane instances and Crossplane providers in a `ManagedControlPlane`.
@@ -9,7 +26,7 @@ Service provider Crossplane manages the lifecycle of Crossplane instances and Cr
 ## 🏗️ Installation of the Service Provider Crossplane
 
 ### Local Development
-To run the service-provider-crossplane locally, you need to first bootstrap an openMCP environment by using [openmcp-operator](https://github.com/openmcp-project/openmcp-operator) and [cluster-provider-kind](https://github.com/openmcp-project/cluster-provider-kind). A comprehensive guide will follow soon.
+To run the service-provider-crossplane locally, you need to first bootstrap an OpenControlPlane environment by using [openmcp-operator](https://github.com/openmcp-project/openmcp-operator) and [cluster-provider-kind](https://github.com/openmcp-project/cluster-provider-kind). A comprehensive guide will follow soon.
 
 For current testing reasons, the service-provider-crossplane needs to run in the cluster. To run the latest version of your changes in your local environment, you need to run:
 
@@ -34,8 +51,8 @@ spec:
   image: ghcr.io/openmcp-project/images/service-provider-crossplane:... # latest local docker image build
 ```
 
-### OpenMCP Landscape
-When you already have an openMCP environment set up, you can deploy the service-provider-crossplane by applying the following manifest:
+### OpenControlPlane Landscape
+When you already have an OpenControlPlane environment set up, you can deploy the service-provider-crossplane by applying the following manifest:
 
 ```yaml
 apiVersion: openmcp.cloud/v1alpha1
