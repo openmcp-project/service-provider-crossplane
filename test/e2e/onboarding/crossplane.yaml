@@ -8,3 +8,6 @@ spec:
   providers:
     - name: provider-btp
       version: v1.9.0
+  functions:
+    - name: function-patch-and-transform
+      version: v0.8.0

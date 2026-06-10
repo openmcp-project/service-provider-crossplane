@@ -13,3 +13,9 @@ spec:
         package: "ghcr.io/openmcp-project/service-provider-crossplane/e2e/provider-btp"
         versions:
           - "v1.9.0"
+  functions:
+    availableFunctions:
+      - name: function-patch-and-transform
+        package: "xpkg.upbound.io/crossplane-contrib/function-patch-and-transform"
+        versions:
+          - "v0.8.0"
