@@ -31,6 +31,15 @@ type CrossplaneProviderConfig struct {
 	Version string `json:"version"`
 }
 
+// CrossplaneFunctionConfig represents configuration for Crossplane functions in a Crossplane instance.
+type CrossplaneFunctionConfig struct {
+	// Name of the function.
+	Name string `json:"name"`
+
+	// Version of the function to install.
+	Version string `json:"version"`
+}
+
 // CrossplaneSpec defines the desired state of a Crossplane instance.
 type CrossplaneSpec struct {
 	// The Version of Crossplane to install.
@@ -39,6 +48,10 @@ type CrossplaneSpec struct {
 	// List of Crossplane providers to be installed.
 	// +kubebuilder:validation:Optional
 	Providers []*CrossplaneProviderConfig `json:"providers,omitempty"`
+
+	// List of Crossplane functions to be installed.
+	// +kubebuilder:validation:Optional
+	Functions []*CrossplaneFunctionConfig `json:"functions,omitempty"`
 }
 
 // CrossplaneStatus defines the observed state of a Crossplane instance.

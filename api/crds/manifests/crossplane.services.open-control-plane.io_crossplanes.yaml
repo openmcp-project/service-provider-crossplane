@@ -51,6 +51,23 @@ spec:
           spec:
             description: spec defines the desired state of Crossplane
             properties:
+              functions:
+                description: List of Crossplane functions to be installed.
+                items:
+                  description: CrossplaneFunctionConfig represents configuration for
+                    Crossplane functions in a Crossplane instance.
+                  properties:
+                    name:
+                      description: Name of the function.
+                      type: string
+                    version:
+                      description: Version of the function to install.
+                      type: string
+                  required:
+                  - name
+                  - version
+                  type: object
+                type: array
               providers:
                 description: List of Crossplane providers to be installed.
                 items:

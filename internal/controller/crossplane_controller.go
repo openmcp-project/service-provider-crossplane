@@ -385,33 +385,41 @@ func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl
 	return ctx, nil
 }
 
+//nolint:gocyclo
 func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
 	// Use a tolerant version resolver during deletion: if a version is unknown,
 	// return a placeholder so that components can still build their resource objects
 	// (the Juggler identifies resources by name, not by URL content).
 	ctx = rcontext.WithVersionResolver(ctx, tolerantResolverFunc(r.GetResolverFunc(pc)))
 
-	// Phase 1: Delete providers while Crossplane is still running.
-	// Crossplane must be running to process Provider finalizers; its PreUninstall
-	// hook refuses to uninstall while Provider or ProviderRevision resources exist.
-	if len(xp.Spec.Providers) > 0 {
-		providerComps := buildProviderComponents(xp, pc)
-		conditions, remaining, err := r.deleteComponents(ctx, mcpClient, xp, providerComps, false)
+	// Phase 1: Delete providers and functions while Crossplane is still running.
+	// Crossplane must be running to process Provider/Function finalizers; its PreUninstall
+	// hook refuses to uninstall while Provider/ProviderRevision/Function/FunctionRevision resources exist.
+	if len(xp.Spec.Providers) > 0 || len(xp.Spec.Functions) > 0 {
+		phase1Comps := make([]juggler.Component, 0, len(xp.Spec.Providers)+len(xp.Spec.Functions))
+		phase1Comps = append(phase1Comps, buildProviderComponents(xp, pc)...)
+		phase1Comps = append(phase1Comps, buildFunctionComponents(xp, pc)...)
+		conditions, remaining, err := r.deleteComponents(ctx, mcpClient, xp, phase1Comps, false)
 		if err != nil {
 			return nil, err
 		}
 		if remaining {
 			return conditions, errComponentRemaining
 		}
-		// Providers are gone, but ProviderRevisions may still be terminating.
+		// Providers/Functions are gone, but revisions may still be terminating.
 		if hasOrphans, err := hasProviderRevisions(ctx, mcpClient); err != nil {
+			return nil, err
+		} else if hasOrphans {
+			return conditions, errComponentRemaining
+		}
+		if hasOrphans, err := hasFunctionRevisions(ctx, mcpClient); err != nil {
 			return nil, err
 		} else if hasOrphans {
 			return conditions, errComponentRemaining
 		}
 	}
 
-	// Phase 2: All providers are gone — delete everything else (Crossplane, secrets, DRC).
+	// Phase 2: All providers and functions are gone — delete everything else (Crossplane, secrets, DRC).
 	comps, err := buildComponents(ctx, r.PlatformCluster.Client(), xp, pc, false)
 	if err != nil {
 		return nil, errors.Join(errors.New("failed to build components for Crossplane instance"), err)
@@ -468,6 +476,22 @@ func hasProviderRevisions(ctx context.Context, mcpClient client.Client) (bool, e
 	return len(list.Items) > 0, nil
 }
 
+func hasFunctionRevisions(ctx context.Context, mcpClient client.Client) (bool, error) {
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "pkg.crossplane.io",
+		Version: "v1",
+		Kind:    "FunctionRevision",
+	})
+	if err := mcpClient.List(ctx, list, client.Limit(1)); err != nil {
+		if apimeta.IsNoMatchError(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return len(list.Items) > 0, nil
+}
+
 func buildProviderComponents(xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) []juggler.Component {
 	comps := make([]juggler.Component, 0, len(xp.Spec.Providers))
 	pullSecrets := convertImagePullSecrets(pc.Spec.Providers.ImagePullSecrets)
@@ -479,6 +503,29 @@ func buildProviderComponents(xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfi
 		})
 	}
 	return comps
+}
+
+func buildFunctionComponents(xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) []juggler.Component {
+	comps := make([]juggler.Component, 0, len(xp.Spec.Functions))
+	pullSecrets := convertImagePullSecrets(functionImagePullSecrets(pc))
+	for _, function := range xp.Spec.Functions {
+		comps = append(comps, &component.CrossplaneFunction{
+			Config:      function,
+			Enabled:     false,
+			PullSecrets: pullSecrets,
+		})
+	}
+	return comps
+}
+
+// functionImagePullSecrets returns the image pull secrets for functions.
+// If the functions section has its own secrets, those are used.
+// Otherwise, the provider image pull secrets are used as a fallback.
+func functionImagePullSecrets(pc *v1alpha1.ProviderConfig) []commonapi.LocalObjectReference {
+	if len(pc.Spec.Functions.ImagePullSecrets) > 0 {
+		return pc.Spec.Functions.ImagePullSecrets
+	}
+	return pc.Spec.Providers.ImagePullSecrets
 }
 
 func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
@@ -527,6 +574,8 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.
 }
 
 // buildComponents builds the components for the Crossplane instance based on its spec and the ProviderConfig.
+//
+//nolint:gocyclo
 func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig, enabled bool) ([]juggler.Component, error) {
 	comps := make([]juggler.Component, 0)
 
@@ -576,6 +625,21 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 		}
 	}
 
+	if xp.Spec.Functions != nil {
+		if len(pc.Spec.Functions.AvailableFunctions) == 0 {
+			return nil, errors.New("functions are specified in Crossplane instance but no available functions configured in ProviderConfig")
+		}
+
+		pullSecrets := convertImagePullSecrets(functionImagePullSecrets(pc))
+		for _, function := range xp.Spec.Functions {
+			comps = append(comps, &component.CrossplaneFunction{
+				Config:      function,
+				Enabled:     xpComp.IsEnabled(),
+				PullSecrets: pullSecrets,
+			})
+		}
+	}
+
 	// DeploymentRuntimeConfig "default" needs to exist even if config for custom CA is removed later.
 	drc := &component.DeploymentRuntimeConfig{
 		Enabled: xpComp.IsEnabled(),
@@ -604,6 +668,7 @@ func buildAllSecretComponents(ctx context.Context, cl client.Client, enabled boo
 	comps := make([]juggler.Component, 0)
 	comps = appendDistinct(comps, buildSecretsComponents(cl, imagePullSecrets, podNs, component.CrossplaneNamespace, enabled)...)
 	comps = appendDistinct(comps, buildSecretsComponents(cl, pc.Spec.Providers.ImagePullSecrets, podNs, component.CrossplaneNamespace, enabled)...)
+	comps = appendDistinct(comps, buildSecretsComponents(cl, functionImagePullSecrets(pc), podNs, component.CrossplaneNamespace, enabled)...)
 
 	if chartPullSecret != nil && chartPullSecret.Name != "" {
 		comps = append(comps, &component.PlatformSecret{
@@ -787,6 +852,7 @@ func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, log
 		&component.Secret{},
 		&component.ConfigMap{},
 		&component.CrossplaneProvider{},
+		&component.CrossplaneFunction{},
 		&component.DeploymentRuntimeConfig{},
 	)
 	juggler.RegisterReconciler(or)
@@ -875,6 +941,11 @@ func isSecretReferencedInProviderConfig(pc *v1alpha1.ProviderConfig, secretName 
 			return true
 		}
 	}
+	for _, pullSecret := range functionImagePullSecrets(pc) {
+		if pullSecret.Name == secretName {
+			return true
+		}
+	}
 	return false
 }
 
@@ -903,9 +974,11 @@ func getMCPRoleRefs() []commonapi.RoleRef {
 	}
 }
 
-// GetResolverFunc is used to verify if the Crossplane instance configuration with its providers is valid.
+// GetResolverFunc is used to verify if the Crossplane instance configuration with its providers and functions is valid.
 // It checks the name and versions against the configured v1alpha1.ProviderConfig on the Platform cluster.
 // The function returns a v1beta1.VersionResolverFn that can be used to resolve the versions later in the reconcile loop.
+//
+//nolint:gocyclo
 func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.ProviderConfig) v1beta1.VersionResolverFn {
 	return func(componentName string, version string) (v1beta1.ComponentVersion, error) {
 		// Check if Crossplane is installable
@@ -946,7 +1019,22 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 		if len(availableVersions) > 0 {
 			return v1beta1.ComponentVersion{}, fmt.Errorf("%w: requested version %q for provider %q is not available, available versions: %v", errutils.ErrInvalidUserInput, version, componentName, availableVersions)
 		}
-		return v1beta1.ComponentVersion{}, fmt.Errorf("%w: provider %q is not available in the ProviderConfig", errutils.ErrInvalidUserInput, componentName)
+
+		// Check if Function is installable
+		for _, function := range providerConfig.Spec.Functions.AvailableFunctions {
+			if componentName == function.Name {
+				for _, availableVersion := range function.Versions {
+					if availableVersion == version {
+						return v1beta1.ComponentVersion{
+							DockerRef: function.Package + ":" + version, // format: <image-location>:<version>
+							Version:   version,
+						}, nil
+					}
+				}
+				return v1beta1.ComponentVersion{}, fmt.Errorf("%w: requested version %q for function %q is not available, available versions: %v", errutils.ErrInvalidUserInput, version, componentName, function.Versions)
+			}
+		}
+		return v1beta1.ComponentVersion{}, fmt.Errorf("%w: component %q is not available in the ProviderConfig", errutils.ErrInvalidUserInput, componentName)
 	}
 }
 
