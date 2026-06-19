@@ -732,9 +732,9 @@ func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
 			},
 			Providers: v1alpha1.CrossplaneProviders{
 				AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
-					{Name: "provider-btp", Versions: []string{"v1.3.0"}, Package: "registry.example.com/channel-a/provider-btp"},
-					{Name: "provider-btp", Versions: []string{"v1.9.0"}, Package: "registry.example.com/channel-b/provider-btp"},
-					{Name: "provider-btp", Versions: []string{"v2.0.0"}, Package: "registry.example.com/channel-c/provider-btp"},
+					{Name: "provider-kubernetes", Versions: []string{"v1.3.0"}, Package: "registry.example.com/channel-a/provider-kubernetes"},
+					{Name: "provider-kubernetes", Versions: []string{"v1.9.0"}, Package: "registry.example.com/channel-b/provider-kubernetes"},
+					{Name: "provider-kubernetes", Versions: []string{"v2.0.0"}, Package: "registry.example.com/channel-c/provider-kubernetes"},
 				},
 			},
 		},
@@ -753,19 +753,19 @@ func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
 		{
 			name:          "resolves version from first entry",
 			version:       "v1.3.0",
-			wantDockerRef: "registry.example.com/channel-a/provider-btp:v1.3.0",
+			wantDockerRef: "registry.example.com/channel-a/provider-kubernetes:v1.3.0",
 			wantVersion:   "v1.3.0",
 		},
 		{
 			name:          "resolves version from second entry",
 			version:       "v1.9.0",
-			wantDockerRef: "registry.example.com/channel-b/provider-btp:v1.9.0",
+			wantDockerRef: "registry.example.com/channel-b/provider-kubernetes:v1.9.0",
 			wantVersion:   "v1.9.0",
 		},
 		{
 			name:          "resolves version from third entry",
 			version:       "v2.0.0",
-			wantDockerRef: "registry.example.com/channel-c/provider-btp:v2.0.0",
+			wantDockerRef: "registry.example.com/channel-c/provider-kubernetes:v2.0.0",
 			wantVersion:   "v2.0.0",
 		},
 		{
@@ -777,7 +777,7 @@ func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			comp, err := resolve("provider-btp", tt.version)
+			comp, err := resolve("provider-kubernetes", tt.version)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, errutils.IgnoreInvalidUserInput(err), "version resolver error should be treated as invalid user input")
@@ -797,15 +797,15 @@ func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
 			Spec: v1alpha1.ProviderConfigSpec{
 				Providers: v1alpha1.CrossplaneProviders{
 					AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
-						{Name: "provider-btp", Versions: []string{"v1.0.0"}, Package: "registry.example.com/channel-a/provider-btp"},
-						{Name: "provider-btp", Versions: []string{"v1.0.0"}, Package: "registry.example.com/channel-b/provider-btp"},
+						{Name: "provider-kubernetes", Versions: []string{"v1.0.0"}, Package: "registry.example.com/channel-a/provider-kubernetes"},
+						{Name: "provider-kubernetes", Versions: []string{"v1.0.0"}, Package: "registry.example.com/channel-b/provider-kubernetes"},
 					},
 				},
 			},
 		}
-		comp, err := r.GetResolverFunc(pcDup)("provider-btp", "v1.0.0")
+		comp, err := r.GetResolverFunc(pcDup)("provider-kubernetes", "v1.0.0")
 		assert.NoError(t, err)
-		assert.Equal(t, "registry.example.com/channel-a/provider-btp:v1.0.0", comp.DockerRef)
+		assert.Equal(t, "registry.example.com/channel-a/provider-kubernetes:v1.0.0", comp.DockerRef)
 	})
 }
 
