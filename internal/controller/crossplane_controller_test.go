@@ -742,26 +742,55 @@ func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
 	r := &CrossplaneReconciler{}
 	resolve := r.GetResolverFunc(pc)
 
-	t.Run("resolves version from first entry", func(t *testing.T) {
-		comp, err := resolve("provider-btp", "v1.3.0")
-		assert.NoError(t, err)
-		assert.Equal(t, "registry.example.com/channel-a/provider-btp:v1.3.0", comp.DockerRef)
-		assert.Equal(t, "v1.3.0", comp.Version)
-	})
-
-	t.Run("resolves version from second entry", func(t *testing.T) {
-		comp, err := resolve("provider-btp", "v1.9.0")
-		assert.NoError(t, err)
-		assert.Equal(t, "registry.example.com/channel-b/provider-btp:v1.9.0", comp.DockerRef)
-		assert.Equal(t, "v1.9.0", comp.Version)
-	})
-
-	t.Run("resolves version from third entry", func(t *testing.T) {
-		comp, err := resolve("provider-btp", "v2.0.0")
-		assert.NoError(t, err)
-		assert.Equal(t, "registry.example.com/channel-c/provider-btp:v2.0.0", comp.DockerRef)
-		assert.Equal(t, "v2.0.0", comp.Version)
-	})
+	tests := []struct {
+		name            string
+		version         string
+		wantErr         bool
+		wantDockerRef   string
+		wantVersion     string
+		wantErrContains []string
+	}{
+		{
+			name:          "resolves version from first entry",
+			version:       "v1.3.0",
+			wantDockerRef: "registry.example.com/channel-a/provider-btp:v1.3.0",
+			wantVersion:   "v1.3.0",
+		},
+		{
+			name:          "resolves version from second entry",
+			version:       "v1.9.0",
+			wantDockerRef: "registry.example.com/channel-b/provider-btp:v1.9.0",
+			wantVersion:   "v1.9.0",
+		},
+		{
+			name:          "resolves version from third entry",
+			version:       "v2.0.0",
+			wantDockerRef: "registry.example.com/channel-c/provider-btp:v2.0.0",
+			wantVersion:   "v2.0.0",
+		},
+		{
+			name:            "error aggregates versions from all entries with the same name",
+			version:         "v9.9.9",
+			wantErr:         true,
+			wantErrContains: []string{"v1.3.0", "v1.9.0", "v2.0.0"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			comp, err := resolve("provider-btp", tt.version)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Nil(t, errutils.IgnoreInvalidUserInput(err), "version resolver error should be treated as invalid user input")
+				for _, s := range tt.wantErrContains {
+					assert.Contains(t, err.Error(), s)
+				}
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantDockerRef, comp.DockerRef)
+			assert.Equal(t, tt.wantVersion, comp.Version)
+		})
+	}
 
 	t.Run("first entry wins when same version appears in multiple entries", func(t *testing.T) {
 		pcDup := &v1alpha1.ProviderConfig{
@@ -777,15 +806,6 @@ func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
 		comp, err := r.GetResolverFunc(pcDup)("provider-btp", "v1.0.0")
 		assert.NoError(t, err)
 		assert.Equal(t, "registry.example.com/channel-a/provider-btp:v1.0.0", comp.DockerRef)
-	})
-
-	t.Run("error aggregates versions from all entries with the same name", func(t *testing.T) {
-		_, err := resolve("provider-btp", "v9.9.9")
-		assert.Error(t, err)
-		assert.Nil(t, errutils.IgnoreInvalidUserInput(err), "version resolver error should be treated as invalid user input")
-		assert.Contains(t, err.Error(), "v1.3.0")
-		assert.Contains(t, err.Error(), "v1.9.0")
-		assert.Contains(t, err.Error(), "v2.0.0")
 	})
 }
 
