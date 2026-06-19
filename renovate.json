@@ -16,6 +16,19 @@
   ],
   "packageRules": [
     {
+      "description": "Group openmcp-project Go components",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchPackageNames": [
+        "github.com/openmcp-project/*",
+        "openmcp-project/*"
+      ],
+      "groupName": "openmcp-project Go dependencies",
+      "minimumReleaseAge": "0 days",
+      "automerge": true
+    },
+    {
       "description": "Group openmcp-project/build submodule and workflow updates",
       "matchDepNames": [
         "hack/common",
