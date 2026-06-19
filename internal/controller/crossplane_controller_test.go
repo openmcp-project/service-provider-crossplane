@@ -724,6 +724,44 @@ func Test_GetResolverFunc(t *testing.T) {
 	}
 }
 
+func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
+	pc := &v1alpha1.ProviderConfig{
+		Spec: v1alpha1.ProviderConfigSpec{
+			CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+				{Version: "v1.0.0", Chart: v1alpha1.ChartSpec{URL: "oci://charts/crossplane:v1.0.0"}},
+			},
+			Providers: v1alpha1.CrossplaneProviders{
+				AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
+					{Name: "provider-btp", Versions: []string{"v1.3.0"}, Package: "registry.example.com/channel-a/provider-btp"},
+					{Name: "provider-btp", Versions: []string{"v1.9.0"}, Package: "registry.example.com/channel-b/provider-btp"},
+				},
+			},
+		},
+	}
+	r := &CrossplaneReconciler{}
+	resolve := r.GetResolverFunc(pc)
+
+	t.Run("resolves version from first entry", func(t *testing.T) {
+		comp, err := resolve("provider-btp", "v1.3.0")
+		assert.NoError(t, err)
+		assert.Equal(t, "registry.example.com/channel-a/provider-btp:v1.3.0", comp.DockerRef)
+	})
+
+	t.Run("resolves version from second entry", func(t *testing.T) {
+		comp, err := resolve("provider-btp", "v1.9.0")
+		assert.NoError(t, err)
+		assert.Equal(t, "registry.example.com/channel-b/provider-btp:v1.9.0", comp.DockerRef)
+	})
+
+	t.Run("error aggregates versions from all entries with the same name", func(t *testing.T) {
+		_, err := resolve("provider-btp", "v9.9.9")
+		assert.Error(t, err)
+		assert.Nil(t, errutils.IgnoreInvalidUserInput(err), "version resolver error should be treated as invalid user input")
+		assert.Contains(t, err.Error(), "v1.3.0")
+		assert.Contains(t, err.Error(), "v1.9.0")
+	})
+}
+
 func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 	tests := []struct {
 		name       string

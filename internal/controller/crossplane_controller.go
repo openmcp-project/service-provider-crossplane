@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -930,18 +931,20 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 		}
 
 		// Check if Provider is installable
+		var availableVersions []string
 		for _, provider := range providerConfig.Spec.Providers.AvailableProviders {
 			if componentName == provider.Name {
-				for _, availableVersion := range provider.Versions {
-					if availableVersion == version {
-						return v1beta1.ComponentVersion{
-							DockerRef: provider.Package + ":" + version, // format: <image-location>:<version>
-							Version:   version,
-						}, nil
-					}
+				if slices.Contains(provider.Versions, version) {
+					return v1beta1.ComponentVersion{
+						DockerRef: provider.Package + ":" + version, // format: <image-location>:<version>
+						Version:   version,
+					}, nil
 				}
-				return v1beta1.ComponentVersion{}, fmt.Errorf("%w: requested version %q for provider %q is not available, available versions: %v", errutils.ErrInvalidUserInput, version, componentName, provider.Versions)
+				availableVersions = append(availableVersions, provider.Versions...)
 			}
+		}
+		if len(availableVersions) > 0 {
+			return v1beta1.ComponentVersion{}, fmt.Errorf("%w: requested version %q for provider %q is not available, available versions: %v", errutils.ErrInvalidUserInput, version, componentName, availableVersions)
 		}
 		return v1beta1.ComponentVersion{}, fmt.Errorf("%w: provider %q is not available in the ProviderConfig", errutils.ErrInvalidUserInput, componentName)
 	}
