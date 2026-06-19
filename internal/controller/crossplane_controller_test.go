@@ -734,6 +734,7 @@ func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
 				AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
 					{Name: "provider-btp", Versions: []string{"v1.3.0"}, Package: "registry.example.com/channel-a/provider-btp"},
 					{Name: "provider-btp", Versions: []string{"v1.9.0"}, Package: "registry.example.com/channel-b/provider-btp"},
+					{Name: "provider-btp", Versions: []string{"v2.0.0"}, Package: "registry.example.com/channel-c/provider-btp"},
 				},
 			},
 		},
@@ -745,12 +746,37 @@ func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
 		comp, err := resolve("provider-btp", "v1.3.0")
 		assert.NoError(t, err)
 		assert.Equal(t, "registry.example.com/channel-a/provider-btp:v1.3.0", comp.DockerRef)
+		assert.Equal(t, "v1.3.0", comp.Version)
 	})
 
 	t.Run("resolves version from second entry", func(t *testing.T) {
 		comp, err := resolve("provider-btp", "v1.9.0")
 		assert.NoError(t, err)
 		assert.Equal(t, "registry.example.com/channel-b/provider-btp:v1.9.0", comp.DockerRef)
+		assert.Equal(t, "v1.9.0", comp.Version)
+	})
+
+	t.Run("resolves version from third entry", func(t *testing.T) {
+		comp, err := resolve("provider-btp", "v2.0.0")
+		assert.NoError(t, err)
+		assert.Equal(t, "registry.example.com/channel-c/provider-btp:v2.0.0", comp.DockerRef)
+		assert.Equal(t, "v2.0.0", comp.Version)
+	})
+
+	t.Run("first entry wins when same version appears in multiple entries", func(t *testing.T) {
+		pcDup := &v1alpha1.ProviderConfig{
+			Spec: v1alpha1.ProviderConfigSpec{
+				Providers: v1alpha1.CrossplaneProviders{
+					AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
+						{Name: "provider-btp", Versions: []string{"v1.0.0"}, Package: "registry.example.com/channel-a/provider-btp"},
+						{Name: "provider-btp", Versions: []string{"v1.0.0"}, Package: "registry.example.com/channel-b/provider-btp"},
+					},
+				},
+			},
+		}
+		comp, err := r.GetResolverFunc(pcDup)("provider-btp", "v1.0.0")
+		assert.NoError(t, err)
+		assert.Equal(t, "registry.example.com/channel-a/provider-btp:v1.0.0", comp.DockerRef)
 	})
 
 	t.Run("error aggregates versions from all entries with the same name", func(t *testing.T) {
@@ -759,6 +785,7 @@ func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
 		assert.Nil(t, errutils.IgnoreInvalidUserInput(err), "version resolver error should be treated as invalid user input")
 		assert.Contains(t, err.Error(), "v1.3.0")
 		assert.Contains(t, err.Error(), "v1.9.0")
+		assert.Contains(t, err.Error(), "v2.0.0")
 	})
 }
 
