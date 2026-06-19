@@ -3,16 +3,16 @@ module github.com/openmcp-project/service-provider-crossplane
 go 1.26.4
 
 require (
-	github.com/crossplane/crossplane/apis/v2 v2.3.1
+	github.com/crossplane/crossplane/apis/v2 v2.3.2
 	github.com/fluxcd/helm-controller/api v1.5.5
 	github.com/fluxcd/kustomize-controller/api v1.8.5
-	github.com/fluxcd/pkg/apis/meta v1.28.0
-	github.com/fluxcd/source-controller/api v1.8.5
+	github.com/fluxcd/pkg/apis/meta v1.30.0
+	github.com/fluxcd/source-controller/api v1.9.0
 	github.com/go-logr/logr v1.4.3
-	github.com/openmcp-project/control-plane-operator v0.4.2
-	github.com/openmcp-project/controller-utils v0.29.1
-	github.com/openmcp-project/openmcp-operator/api v1.0.1
-	github.com/openmcp-project/openmcp-operator/lib v1.0.1
+	github.com/openmcp-project/control-plane-operator v0.4.3
+	github.com/openmcp-project/controller-utils v0.30.0
+	github.com/openmcp-project/openmcp-operator/api v1.1.0
+	github.com/openmcp-project/openmcp-operator/lib v1.1.0
 	github.com/openmcp-project/openmcp-testing v1.0.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
@@ -108,7 +108,7 @@ require (
 	github.com/cloudflare/cfssl v1.6.5 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
-	github.com/containerd/containerd/v2 v2.3.0 // indirect
+	github.com/containerd/containerd/v2 v2.3.1 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
@@ -141,7 +141,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fluxcd/cli-utils v1.2.0 // indirect
 	github.com/fluxcd/flux2/v2 v2.8.8 // indirect
-	github.com/fluxcd/pkg/apis/acl v0.9.0 // indirect
+	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.19.0 // indirect
 	github.com/fluxcd/pkg/kustomize v1.27.2 // indirect
 	github.com/fluxcd/pkg/tar v0.17.0 // indirect
@@ -258,8 +258,6 @@ require (
 	github.com/nozzle/throttler v0.0.0-20180817012639-2ea982251481 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/oleiade/reflections v1.1.0 // indirect
-	github.com/onsi/ginkgo/v2 v2.31.0 // indirect
-	github.com/onsi/gomega v1.42.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opencontainers/runtime-spec v1.3.0 // indirect
@@ -284,7 +282,6 @@ require (
 	github.com/secure-systems-lab/go-securesystemslib v0.11.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
-	github.com/shirou/gopsutil/v4 v4.26.5 // indirect
 	github.com/sigstore/cosign/v3 v3.0.6 // indirect
 	github.com/sigstore/fulcio v1.8.5 // indirect
 	github.com/sigstore/protobuf-specs v0.5.0 // indirect
