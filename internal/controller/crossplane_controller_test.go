@@ -724,6 +724,91 @@ func Test_GetResolverFunc(t *testing.T) {
 	}
 }
 
+func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
+	pc := &v1alpha1.ProviderConfig{
+		Spec: v1alpha1.ProviderConfigSpec{
+			CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+				{Version: "v1.0.0", Chart: v1alpha1.ChartSpec{URL: "oci://charts/crossplane:v1.0.0"}},
+			},
+			Providers: v1alpha1.CrossplaneProviders{
+				AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
+					{Name: "provider-kubernetes", Versions: []string{"v1.3.0"}, Package: "registry.example.com/channel-a/provider-kubernetes"},
+					{Name: "provider-kubernetes", Versions: []string{"v1.9.0"}, Package: "registry.example.com/channel-b/provider-kubernetes"},
+					{Name: "provider-kubernetes", Versions: []string{"v2.0.0"}, Package: "registry.example.com/channel-c/provider-kubernetes"},
+				},
+			},
+		},
+	}
+	r := &CrossplaneReconciler{}
+	resolve := r.GetResolverFunc(pc)
+
+	tests := []struct {
+		name            string
+		version         string
+		wantErr         bool
+		wantDockerRef   string
+		wantVersion     string
+		wantErrContains []string
+	}{
+		{
+			name:          "resolves version from first entry",
+			version:       "v1.3.0",
+			wantDockerRef: "registry.example.com/channel-a/provider-kubernetes:v1.3.0",
+			wantVersion:   "v1.3.0",
+		},
+		{
+			name:          "resolves version from second entry",
+			version:       "v1.9.0",
+			wantDockerRef: "registry.example.com/channel-b/provider-kubernetes:v1.9.0",
+			wantVersion:   "v1.9.0",
+		},
+		{
+			name:          "resolves version from third entry",
+			version:       "v2.0.0",
+			wantDockerRef: "registry.example.com/channel-c/provider-kubernetes:v2.0.0",
+			wantVersion:   "v2.0.0",
+		},
+		{
+			name:            "error aggregates versions from all entries with the same name",
+			version:         "v9.9.9",
+			wantErr:         true,
+			wantErrContains: []string{"v1.3.0", "v1.9.0", "v2.0.0"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			comp, err := resolve("provider-kubernetes", tt.version)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Nil(t, errutils.IgnoreInvalidUserInput(err), "version resolver error should be treated as invalid user input")
+				for _, s := range tt.wantErrContains {
+					assert.Contains(t, err.Error(), s)
+				}
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantDockerRef, comp.DockerRef)
+			assert.Equal(t, tt.wantVersion, comp.Version)
+		})
+	}
+
+	t.Run("first entry wins when same version appears in multiple entries", func(t *testing.T) {
+		pcDup := &v1alpha1.ProviderConfig{
+			Spec: v1alpha1.ProviderConfigSpec{
+				Providers: v1alpha1.CrossplaneProviders{
+					AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
+						{Name: "provider-kubernetes", Versions: []string{"v1.0.0"}, Package: "registry.example.com/channel-a/provider-kubernetes"},
+						{Name: "provider-kubernetes", Versions: []string{"v1.0.0"}, Package: "registry.example.com/channel-b/provider-kubernetes"},
+					},
+				},
+			},
+		}
+		comp, err := r.GetResolverFunc(pcDup)("provider-kubernetes", "v1.0.0")
+		assert.NoError(t, err)
+		assert.Equal(t, "registry.example.com/channel-a/provider-kubernetes:v1.0.0", comp.DockerRef)
+	})
+}
+
 func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 	tests := []struct {
 		name       string
