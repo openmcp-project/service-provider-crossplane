@@ -243,12 +243,15 @@ func (r *CrossplaneReconciler) doReconcileComponents(ctx context.Context, mcpCli
 			break
 		}
 	}
-	if allReady {
-		rr.SmartRequeue = ctrlutils.SR_BACKOFF
-	} else {
+	if !allReady {
 		rr.Conditions = overrideCondition(rr.Conditions, ConditionTypeReconciled, metav1.ConditionFalse, ReasonComponentReconcileFailed, "Not all components are ready")
-		rr.SmartRequeue = ctrlutils.SR_RESET
 	}
+
+	// always do a backoff to not overload the reconciler
+	// most of the times the components will become ready on the lower end of the back off
+	// this should mostly handle crossplane instances that will never become ready and be stuck
+	// the trade off is that the status update is not as instantaneous
+	rr.SmartRequeue = ctrlutils.SR_BACKOFF
 }
 
 func (r *CrossplaneReconciler) doDeleteComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig, rr *ctrlutils.ReconcileResult[*v1alpha1.Crossplane]) {
