@@ -1,6 +1,6 @@
 module github.com/openmcp-project/service-provider-crossplane
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/crossplane/crossplane/apis/v2 v2.3.2
@@ -10,13 +10,13 @@ require (
 	github.com/fluxcd/source-controller/api v1.9.0
 	github.com/go-logr/logr v1.4.3
 	github.com/openmcp-project/control-plane-operator v0.4.3
-	github.com/openmcp-project/controller-utils v0.30.0
+	github.com/openmcp-project/controller-utils v0.31.0
 	github.com/openmcp-project/openmcp-operator/api v1.1.0
 	github.com/openmcp-project/openmcp-operator/lib v1.1.0
 	github.com/openmcp-project/openmcp-testing v1.0.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/text v0.38.0
+	golang.org/x/text v0.40.0
 	gotest.tools/v3 v3.5.2
 	k8s.io/api v0.36.2
 	k8s.io/apiextensions-apiserver v0.36.2
@@ -142,7 +142,7 @@ require (
 	github.com/fluxcd/cli-utils v1.2.0 // indirect
 	github.com/fluxcd/flux2/v2 v2.8.8 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
-	github.com/fluxcd/pkg/apis/kustomize v1.19.1 // indirect
+	github.com/fluxcd/pkg/apis/kustomize v1.20.0 // indirect
 	github.com/fluxcd/pkg/kustomize v1.27.2 // indirect
 	github.com/fluxcd/pkg/tar v0.17.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
@@ -342,14 +342,14 @@ require (
 	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
-	golang.org/x/mod v0.37.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/crypto v0.54.0 // indirect
+	golang.org/x/exp v0.0.0-20260709172345-9ea1abe57597 // indirect
+	golang.org/x/mod v0.38.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.21.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/term v0.44.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/api v0.277.0 // indirect
