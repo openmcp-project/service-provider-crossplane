@@ -387,4 +387,4 @@ require (
 // Renamed from ThalesIgnite to ThalesGroup; old versions still declare the old path,
 // causing a path mismatch. Required by ocm.software/ocm (transitive via control-plane-operator)
 // through sigstore/cosign.
-replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.1
+replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.2
