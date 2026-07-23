@@ -1021,18 +1021,20 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 		}
 
 		// Check if Function is installable
+		var availableFunctionVersions []string
 		for _, function := range providerConfig.Spec.Functions.AvailableFunctions {
 			if componentName == function.Name {
-				for _, availableVersion := range function.Versions {
-					if availableVersion == version {
-						return v1beta1.ComponentVersion{
-							DockerRef: function.Package + ":" + version, // format: <image-location>:<version>
-							Version:   version,
-						}, nil
-					}
+				if slices.Contains(function.Versions, version) {
+					return v1beta1.ComponentVersion{
+						DockerRef: function.Package + ":" + version, // format: <image-location>:<version>
+						Version:   version,
+					}, nil
 				}
-				return v1beta1.ComponentVersion{}, fmt.Errorf("%w: requested version %q for function %q is not available, available versions: %v", errutils.ErrInvalidUserInput, version, componentName, function.Versions)
+				availableFunctionVersions = append(availableFunctionVersions, function.Versions...)
 			}
+		}
+		if len(availableFunctionVersions) > 0 {
+			return v1beta1.ComponentVersion{}, fmt.Errorf("%w: requested version %q for function %q is not available, available versions: %v", errutils.ErrInvalidUserInput, version, componentName, availableFunctionVersions)
 		}
 		return v1beta1.ComponentVersion{}, fmt.Errorf("%w: component %q is not available in the ProviderConfig", errutils.ErrInvalidUserInput, componentName)
 	}

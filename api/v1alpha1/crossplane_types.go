@@ -47,10 +47,14 @@ type CrossplaneSpec struct {
 
 	// List of Crossplane providers to be installed.
 	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=name
 	Providers []*CrossplaneProviderConfig `json:"providers,omitempty"`
 
 	// List of Crossplane functions to be installed.
 	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=name
 	Functions []*CrossplaneFunctionConfig `json:"functions,omitempty"`
 }
 

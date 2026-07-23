@@ -74,7 +74,7 @@ func TestServiceProvider(t *testing.T) {
 		Assess("ManagedControlPlane: provider-btp is installed and healthy",
 			crossplaneProviderHealthy(mcpName, providerBTPName),
 		).
-		Assess("ManagedControlPlane: function-patch-and-transform is installed and healthy",
+		Assess("ControlPlane: function-patch-and-transform is installed and healthy",
 			crossplaneFunctionHealthy(mcpName, functionPatchAndTransformName),
 		).
 		Teardown(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
@@ -176,7 +176,7 @@ func crossplaneFunctionHealthy(mcpName, functionName string) features.Func {
 		})
 		function.SetName(functionName)
 		if err := wait.For(openmcpconditions.Match(function, mcp, "Healthy", corev1.ConditionTrue), wait.WithTimeout(5*time.Minute)); err != nil {
-			t.Errorf("crossplane function %s not healthy on MCP %s: %v", functionName, mcpName, err)
+			t.Errorf("crossplane function %s not healthy on ControlPlane %s: %v", functionName, mcpName, err)
 		}
 		return ctx
 	}

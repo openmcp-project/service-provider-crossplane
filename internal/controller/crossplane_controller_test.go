@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -906,27 +905,13 @@ func Test_buildComponents(t *testing.T) {
 				t.Setenv("POD_NAMESPACE", "pod-namespace")
 			}
 			got, err := buildComponents(tt.args.ctx, tt.args.client, tt.args.xp, tt.args.pc, tt.args.enabled)
-			if err != nil && tt.wantErr == nil && err.Error() != tt.wantErr.Error() {
-				t.Errorf("buildComponents() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr != nil {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr.Error())
 				return
 			}
-			if len(got) != len(tt.want) {
-				t.Errorf("buildComponents() length mismatch: got %d, want %d", len(got), len(tt.want))
-				return
-			}
-			// Check if each element in got has a counterpart in want
-			for i, gotComponent := range got {
-				found := false
-				for _, wantComponent := range tt.want {
-					if reflect.DeepEqual(gotComponent, wantComponent) {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("buildComponents() element %d not found in expected: %v", i, gotComponent)
-				}
-			}
+			require.NoError(t, err)
+			assert.ElementsMatch(t, tt.want, got)
 		})
 	}
 }
