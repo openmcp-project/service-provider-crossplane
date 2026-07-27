@@ -31,7 +31,7 @@ const (
 	crossplaneDeployment          = "crossplane"
 	providerBTPName               = "provider-btp"
 	functionPatchAndTransformName = "function-patch-and-transform"
-  timeout = 5 * time.Minute
+	timeout                       = 5 * time.Minute
 )
 
 func TestServiceProvider(t *testing.T) {
