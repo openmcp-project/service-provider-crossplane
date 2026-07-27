@@ -7,6 +7,9 @@ spec:
   providers:
     - name: provider-sample
       version: 1.0.0
+  functions:
+    - name: function-patch-and-transform
+      version: 0.8.0
 status:
   phase: Ready/Progressing/Terminating
   conditions:

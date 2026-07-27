@@ -70,6 +70,59 @@ spec:
                 - key
                 type: object
                 x-kubernetes-map-type: atomic
+              functions:
+                description: Functions holds the configuration for Crossplane functions
+                  that can be installed via the Service Provider Crossplane.
+                properties:
+                  availableFunctions:
+                    description: AvailableFunctions holds the list of functions that
+                      can be configured with the Service Provider Crossplane.
+                    items:
+                      description: AvailableCrossplaneFunction represents configuration
+                        for Crossplane functions in a ProviderConfig of the Service
+                        Provider Crossplane.
+                      properties:
+                        name:
+                          description: Name of the function.
+                          type: string
+                        package:
+                          description: Package is the package name of the function.
+                          type: string
+                        versions:
+                          description: Versions of the function that are available
+                            for installation.
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - name
+                      - package
+                      - versions
+                      type: object
+                    type: array
+                  imagePullSecretRefs:
+                    description: |-
+                      Image pull secrets for pulling Crossplane function images from private OCI registries.
+                      If not specified, the image pull secrets from the providers section will be used as a fallback.
+                    items:
+                      description: LocalObjectReference is a reference to an object
+                        in the same namespace as the resource referencing it.
+                      properties:
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    type: array
+                required:
+                - availableFunctions
+                type: object
               providers:
                 description: Providers holds the configuration for Crossplane providers
                   that can be installed via the Service Provider Crossplane.

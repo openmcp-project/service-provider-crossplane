@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -601,6 +600,265 @@ func Test_buildComponents(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name: "Crossplane and crossplane-function components are built and enabled",
+			args: args{
+				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
+				client:          nil,
+				setPodNamespace: true,
+				xp: &v1alpha1.Crossplane{
+					Spec: v1alpha1.CrossplaneSpec{
+						Version:   "v1.0.0",
+						Functions: []*v1alpha1.CrossplaneFunctionConfig{{Name: "function-1", Version: "v0.1.0"}},
+					},
+				},
+				pc: &v1alpha1.ProviderConfig{
+					Spec: v1alpha1.ProviderConfigSpec{
+						CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+							{
+								Version: "v1.0.0",
+								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							},
+						},
+						Functions: v1alpha1.CrossplaneFunctions{
+							AvailableFunctions: []v1alpha1.AvailableCrossplaneFunction{
+								{Name: "function-1", Versions: []string{"v0.1.0"}, Package: "crossplane/function-1"},
+							},
+						},
+					},
+				},
+				enabled: true,
+			},
+			want: []juggler.Component{
+				&component.Crossplane{
+					Enabled: true,
+					Config: &v1alpha1.CrossplaneSpec{
+						Version:   "v1.0.0",
+						Functions: []*v1alpha1.CrossplaneFunctionConfig{{Name: "function-1", Version: "v0.1.0"}},
+					},
+				},
+				&component.CrossplaneFunction{
+					Enabled: true,
+					Config:  &v1alpha1.CrossplaneFunctionConfig{Name: "function-1", Version: "v0.1.0"},
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "Crossplane with both providers and functions",
+			args: args{
+				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
+				client:          nil,
+				setPodNamespace: true,
+				xp: &v1alpha1.Crossplane{
+					Spec: v1alpha1.CrossplaneSpec{
+						Version:   "v1.0.0",
+						Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
+						Functions: []*v1alpha1.CrossplaneFunctionConfig{{Name: "function-1", Version: "v0.2.0"}},
+					},
+				},
+				pc: &v1alpha1.ProviderConfig{
+					Spec: v1alpha1.ProviderConfigSpec{
+						CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+							{
+								Version: "v1.0.0",
+								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							},
+						},
+						Providers: v1alpha1.CrossplaneProviders{
+							AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
+								{Name: "provider-1", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-1"},
+							},
+						},
+						Functions: v1alpha1.CrossplaneFunctions{
+							AvailableFunctions: []v1alpha1.AvailableCrossplaneFunction{
+								{Name: "function-1", Versions: []string{"v0.2.0"}, Package: "crossplane/function-1"},
+							},
+						},
+					},
+				},
+				enabled: true,
+			},
+			want: []juggler.Component{
+				&component.Crossplane{
+					Enabled: true,
+					Config: &v1alpha1.CrossplaneSpec{
+						Version:   "v1.0.0",
+						Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
+						Functions: []*v1alpha1.CrossplaneFunctionConfig{{Name: "function-1", Version: "v0.2.0"}},
+					},
+				},
+				&component.CrossplaneProvider{
+					Enabled: true,
+					Config:  &v1alpha1.CrossplaneProviderConfig{Name: "provider-1", Version: "v0.1.0"},
+				},
+				&component.CrossplaneFunction{
+					Enabled: true,
+					Config:  &v1alpha1.CrossplaneFunctionConfig{Name: "function-1", Version: "v0.2.0"},
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "Error when functions specified but no available functions in ProviderConfig",
+			args: args{
+				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
+				client:          nil,
+				setPodNamespace: true,
+				xp: &v1alpha1.Crossplane{
+					Spec: v1alpha1.CrossplaneSpec{
+						Version:   "v1.0.0",
+						Functions: []*v1alpha1.CrossplaneFunctionConfig{{Name: "function-1", Version: "v0.1.0"}},
+					},
+				},
+				pc: &v1alpha1.ProviderConfig{
+					Spec: v1alpha1.ProviderConfigSpec{
+						CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+							{
+								Version: "v1.0.0",
+								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							},
+						},
+						Functions: v1alpha1.CrossplaneFunctions{},
+					},
+				},
+				enabled: true,
+			},
+			want:    nil,
+			wantErr: errors.New("functions are specified in Crossplane instance but no available functions configured in ProviderConfig"),
+		},
+		{
+			name: "Crossplane with function image pull secrets",
+			args: args{
+				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
+				client:          nil,
+				setPodNamespace: true,
+				xp: &v1alpha1.Crossplane{
+					Spec: v1alpha1.CrossplaneSpec{
+						Version:   "v1.0.0",
+						Functions: []*v1alpha1.CrossplaneFunctionConfig{{Name: "function-1", Version: "v0.1.0"}},
+					},
+				},
+				pc: &v1alpha1.ProviderConfig{
+					Spec: v1alpha1.ProviderConfigSpec{
+						CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+							{
+								Version: "v1.0.0",
+								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							},
+						},
+						Functions: v1alpha1.CrossplaneFunctions{
+							AvailableFunctions: []v1alpha1.AvailableCrossplaneFunction{
+								{Name: "function-1", Versions: []string{"v0.1.0"}, Package: "crossplane/function-1"},
+							},
+							ImagePullSecrets: []commonapi.LocalObjectReference{{Name: "function-pull-secret"}},
+						},
+					},
+				},
+				enabled: true,
+			},
+			want: []juggler.Component{
+				&component.Crossplane{
+					Enabled: true,
+					Config: &v1alpha1.CrossplaneSpec{
+						Version:   "v1.0.0",
+						Functions: []*v1alpha1.CrossplaneFunctionConfig{{Name: "function-1", Version: "v0.1.0"}},
+					},
+				},
+				&component.CrossplaneFunction{
+					Enabled:     true,
+					Config:      &v1alpha1.CrossplaneFunctionConfig{Name: "function-1", Version: "v0.1.0"},
+					PullSecrets: []corev1.LocalObjectReference{{Name: "function-pull-secret"}},
+				},
+				&component.Secret{
+					SourceClient: nil,
+					Source:       client.ObjectKey{Name: "function-pull-secret", Namespace: "pod-namespace"},
+					Target:       client.ObjectKey{Name: "function-pull-secret", Namespace: component.CrossplaneNamespace},
+					Enabled:      true,
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "Crossplane with functions falls back to provider image pull secrets when function secrets not set",
+			args: args{
+				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
+				client:          nil,
+				setPodNamespace: true,
+				xp: &v1alpha1.Crossplane{
+					Spec: v1alpha1.CrossplaneSpec{
+						Version:   "v1.0.0",
+						Functions: []*v1alpha1.CrossplaneFunctionConfig{{Name: "function-1", Version: "v0.1.0"}},
+					},
+				},
+				pc: &v1alpha1.ProviderConfig{
+					Spec: v1alpha1.ProviderConfigSpec{
+						CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+							{
+								Version: "v1.0.0",
+								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+							},
+						},
+						Providers: v1alpha1.CrossplaneProviders{
+							ImagePullSecrets: []commonapi.LocalObjectReference{{Name: "shared-pull-secret"}},
+						},
+						Functions: v1alpha1.CrossplaneFunctions{
+							AvailableFunctions: []v1alpha1.AvailableCrossplaneFunction{
+								{Name: "function-1", Versions: []string{"v0.1.0"}, Package: "crossplane/function-1"},
+							},
+							// ImagePullSecrets not set — should fall back to provider secrets
+						},
+					},
+				},
+				enabled: true,
+			},
+			want: []juggler.Component{
+				&component.Crossplane{
+					Enabled: true,
+					Config: &v1alpha1.CrossplaneSpec{
+						Version:   "v1.0.0",
+						Functions: []*v1alpha1.CrossplaneFunctionConfig{{Name: "function-1", Version: "v0.1.0"}},
+					},
+				},
+				&component.CrossplaneFunction{
+					Enabled:     true,
+					Config:      &v1alpha1.CrossplaneFunctionConfig{Name: "function-1", Version: "v0.1.0"},
+					PullSecrets: []corev1.LocalObjectReference{{Name: "shared-pull-secret"}},
+				},
+				&component.Secret{
+					SourceClient: nil,
+					Source:       client.ObjectKey{Name: "shared-pull-secret", Namespace: "pod-namespace"},
+					Target:       client.ObjectKey{Name: "shared-pull-secret", Namespace: component.CrossplaneNamespace},
+					Enabled:      true,
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+				},
+			},
+			wantErr: nil,
+		},
+		{
 			name: "Error when POD_NAMESPACE evn var not found",
 			args: args{
 				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
@@ -647,27 +905,13 @@ func Test_buildComponents(t *testing.T) {
 				t.Setenv("POD_NAMESPACE", "pod-namespace")
 			}
 			got, err := buildComponents(tt.args.ctx, tt.args.client, tt.args.xp, tt.args.pc, tt.args.enabled)
-			if err != nil && tt.wantErr == nil && err.Error() != tt.wantErr.Error() {
-				t.Errorf("buildComponents() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr != nil {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr.Error())
 				return
 			}
-			if len(got) != len(tt.want) {
-				t.Errorf("buildComponents() length mismatch: got %d, want %d", len(got), len(tt.want))
-				return
-			}
-			// Check if each element in got has a counterpart in want
-			for i, gotComponent := range got {
-				found := false
-				for _, wantComponent := range tt.want {
-					if reflect.DeepEqual(gotComponent, wantComponent) {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Errorf("buildComponents() element %d not found in expected: %v", i, gotComponent)
-				}
-			}
+			require.NoError(t, err)
+			assert.ElementsMatch(t, tt.want, got)
 		})
 	}
 }
@@ -694,6 +938,11 @@ func Test_GetResolverFunc(t *testing.T) {
 					{Name: "provider-aws", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws"},
 				},
 			},
+			Functions: v1alpha1.CrossplaneFunctions{
+				AvailableFunctions: []v1alpha1.AvailableCrossplaneFunction{
+					{Name: "function-patch-and-transform", Versions: []string{"v0.8.0"}, Package: "xpkg.upbound.io/crossplane-contrib/function-patch-and-transform"},
+				},
+			},
 		},
 	}
 	r := &CrossplaneReconciler{}
@@ -709,7 +958,10 @@ func Test_GetResolverFunc(t *testing.T) {
 		{"unsupported crossplane version", component.CrossplaneRelease, "v9.9.9", true},
 		{"valid provider version", "provider-aws", "v0.1.0", false},
 		{"unsupported provider version", "provider-aws", "v9.9.9", true},
-		{"unknown provider", "provider-unknown", "v0.1.0", true},
+		{"valid function version", "function-patch-and-transform", "v0.8.0", false},
+		{"unsupported function version", "function-patch-and-transform", "v9.9.9", true},
+		{"unknown function", "function-unknown", "v0.1.0", true},
+		{"unknown component", "unknown-component", "v0.1.0", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -974,6 +1226,50 @@ func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 			secretName: "image-secret",
 			want:       false,
 		},
+		{
+			name: "matches function image pull secret",
+			pc: &v1alpha1.ProviderConfig{
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{},
+					Functions: v1alpha1.CrossplaneFunctions{
+						ImagePullSecrets: []commonapi.LocalObjectReference{
+							{Name: "function-pull-secret"},
+						},
+					},
+				},
+			},
+			secretName: "function-pull-secret",
+			want:       true,
+		},
+		{
+			name: "does not match unrelated secret with functions configured",
+			pc: &v1alpha1.ProviderConfig{
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{},
+					Functions: v1alpha1.CrossplaneFunctions{
+						ImagePullSecrets: []commonapi.LocalObjectReference{
+							{Name: "function-pull-secret"},
+						},
+					},
+				},
+			},
+			secretName: "unrelated-secret",
+			want:       false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1108,6 +1404,43 @@ func Test_mapSecretToRequests(t *testing.T) {
 					Providers: v1alpha1.CrossplaneProviders{
 						ImagePullSecrets: []commonapi.LocalObjectReference{
 							{Name: "provider-pull-secret"},
+						},
+					},
+				},
+			},
+			crossplaneInstances: []client.Object{
+				&v1alpha1.Crossplane{
+					ObjectMeta: metav1.ObjectMeta{Name: "xp-1", Namespace: "ns-1"},
+				},
+			},
+			wantRequests: []ctrl.Request{
+				{NamespacedName: client.ObjectKey{Name: "xp-1", Namespace: "ns-1"}},
+			},
+		},
+		{
+			name: "function image pull secret triggers reconciliation",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "function-pull-secret",
+					Namespace: "sp-namespace",
+				},
+			},
+			providerConfig: &v1alpha1.ProviderConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: TestProviderName,
+				},
+				Spec: v1alpha1.ProviderConfigSpec{
+					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
+						{
+							Version: "v1.0.0",
+							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
+							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
+						},
+					},
+					Providers: v1alpha1.CrossplaneProviders{},
+					Functions: v1alpha1.CrossplaneFunctions{
+						ImagePullSecrets: []commonapi.LocalObjectReference{
+							{Name: "function-pull-secret"},
 						},
 					},
 				},

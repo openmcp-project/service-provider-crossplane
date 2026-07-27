@@ -205,6 +205,8 @@ func (*Crossplane) Hooks() juggler.ComponentHooks {
 		PreUninstall: hooks.PreventOrphanedResources([]schema.GroupVersionKind{
 			{Group: "pkg.crossplane.io", Version: "v1", Kind: "Provider"},
 			{Group: "pkg.crossplane.io", Version: "v1", Kind: "ProviderRevision"},
+			{Group: "pkg.crossplane.io", Version: "v1", Kind: "Function"},
+			{Group: "pkg.crossplane.io", Version: "v1", Kind: "FunctionRevision"},
 		}),
 	}
 }
