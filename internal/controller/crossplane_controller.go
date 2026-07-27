@@ -643,8 +643,10 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 	// DeploymentRuntimeConfig "default" needs to exist even if config for custom CA is removed later.
 	drc := &component.DeploymentRuntimeConfig{
 		Enabled: xpComp.IsEnabled(),
-		Name:    "default",
-		Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{}, // empty by default,
+		// TODO: will be fixed with https://github.com/openmcp-project/service-provider-crossplane/issues/176
+		// nolint:goconst
+		Name:   "default",
+		Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{}, // empty by default,
 	}
 	comps = append(comps, drc)
 
