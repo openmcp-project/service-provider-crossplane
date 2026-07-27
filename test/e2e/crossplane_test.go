@@ -31,6 +31,7 @@ const (
 	crossplaneDeployment          = "crossplane"
 	providerBTPName               = "provider-btp"
 	functionPatchAndTransformName = "function-patch-and-transform"
+	timeout                       = 5 * time.Minute
 )
 
 func TestServiceProvider(t *testing.T) {
@@ -57,7 +58,7 @@ func TestServiceProvider(t *testing.T) {
 					return ctx
 				}
 				for _, obj := range objList.Items {
-					if err := wait.For(openmcpconditions.Match(&obj, onboardingConfig, "Reconciled", corev1.ConditionTrue), wait.WithTimeout(5*time.Minute)); err != nil {
+					if err := wait.For(openmcpconditions.Match(&obj, onboardingConfig, "Reconciled", corev1.ConditionTrue), wait.WithTimeout(timeout)); err != nil {
 						t.Error(err)
 					}
 				}
@@ -84,13 +85,13 @@ func TestServiceProvider(t *testing.T) {
 				return ctx
 			}
 			for _, obj := range onboardingList.Items {
-				if err := resources.DeleteObject(ctx, onboardingConfig, &obj, wait.WithTimeout(2*time.Minute)); err != nil {
+				if err := resources.DeleteObject(ctx, onboardingConfig, &obj, wait.WithTimeout(timeout)); err != nil {
 					t.Errorf("failed to delete onboarding object: %v", err)
 				}
 			}
 			return ctx
 		}).
-		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(5*time.Minute)))
+		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(timeout)))
 
 	testenv.Test(t, basicProviderTest.Feature())
 }
@@ -107,7 +108,7 @@ func crossplaneNamespaceExists(mcpName string) features.Func {
 				{ObjectMeta: metav1.ObjectMeta{Name: crossplaneNamespace}},
 			},
 		}
-		if err := wait.For(conditions.New(mcp.Client().Resources()).ResourcesFound(nsList), wait.WithTimeout(3*time.Minute)); err != nil {
+		if err := wait.For(conditions.New(mcp.Client().Resources()).ResourcesFound(nsList), wait.WithTimeout(timeout)); err != nil {
 			t.Errorf("%s namespace not found on MCP %s: %v", crossplaneNamespace, mcpName, err)
 		}
 		return ctx
@@ -126,14 +127,14 @@ func crossplaneDeploymentReady(mcpName string) features.Func {
 				{ObjectMeta: metav1.ObjectMeta{Name: crossplaneDeployment, Namespace: crossplaneNamespace}},
 			},
 		}
-		if err := wait.For(conditions.New(mcp.Client().Resources()).ResourcesFound(deployList), wait.WithTimeout(5*time.Minute)); err != nil {
+		if err := wait.For(conditions.New(mcp.Client().Resources()).ResourcesFound(deployList), wait.WithTimeout(timeout)); err != nil {
 			t.Errorf("crossplane deployment not found on MCP %s: %v", mcpName, err)
 			return ctx
 		}
 		deploy := &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{Name: crossplaneDeployment, Namespace: crossplaneNamespace},
 		}
-		if err := wait.For(conditions.New(mcp.Client().Resources()).DeploymentConditionMatch(deploy, appsv1.DeploymentAvailable, corev1.ConditionTrue), wait.WithTimeout(5*time.Minute)); err != nil {
+		if err := wait.For(conditions.New(mcp.Client().Resources()).DeploymentConditionMatch(deploy, appsv1.DeploymentAvailable, corev1.ConditionTrue), wait.WithTimeout(timeout)); err != nil {
 			t.Errorf("crossplane deployment not available on MCP %s: %v", mcpName, err)
 		}
 		return ctx
@@ -154,7 +155,7 @@ func crossplaneProviderHealthy(mcpName, providerName string) features.Func {
 			Kind:    "Provider",
 		})
 		provider.SetName(providerName)
-		if err := wait.For(openmcpconditions.Match(provider, mcp, "Healthy", corev1.ConditionTrue), wait.WithTimeout(5*time.Minute)); err != nil {
+		if err := wait.For(openmcpconditions.Match(provider, mcp, "Healthy", corev1.ConditionTrue), wait.WithTimeout(timeout)); err != nil {
 			t.Errorf("crossplane provider %s not healthy on MCP %s: %v", providerName, mcpName, err)
 		}
 		return ctx
@@ -228,7 +229,7 @@ func TestInvalidVersion(t *testing.T) {
 				return ctx
 			},
 		).
-		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(5*time.Minute)))
+		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(timeout)))
 
 	testenv.Test(t, invalidVersionTest.Feature())
 }
@@ -279,13 +280,13 @@ func TestInvalidProviderVersion(t *testing.T) {
 					t.Errorf("expected ProviderBtpReady=False with invalid provider version in message: %v", err)
 				}
 
-				if err := resources.DeleteObject(ctx, onboardingConfig, obj, wait.WithTimeout(5*time.Minute)); err != nil {
+				if err := resources.DeleteObject(ctx, onboardingConfig, obj, wait.WithTimeout(timeout)); err != nil {
 					t.Errorf("failed to delete Crossplane resource: %v", err)
 				}
 				return ctx
 			},
 		).
-		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(5*time.Minute)))
+		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(timeout)))
 
 	testenv.Test(t, invalidProviderVersionTest.Feature())
 }
@@ -361,7 +362,7 @@ func TestInvalidVersionRecovery(t *testing.T) {
 
 				if err := wait.For(
 					openmcpconditions.Match(obj, onboardingConfig, "Reconciled", corev1.ConditionTrue),
-					wait.WithTimeout(5*time.Minute),
+					wait.WithTimeout(timeout),
 				); err != nil {
 					t.Errorf("expected Reconciled=True after updating to valid version: %v", err)
 				}
@@ -385,12 +386,12 @@ func TestInvalidVersionRecovery(t *testing.T) {
 			})
 			obj.SetName(mcpName)
 			obj.SetNamespace("default")
-			if err := resources.DeleteObject(ctx, onboardingConfig, obj, wait.WithTimeout(5*time.Minute)); err != nil {
+			if err := resources.DeleteObject(ctx, onboardingConfig, obj, wait.WithTimeout(timeout)); err != nil {
 				t.Errorf("failed to delete Crossplane resource: %v", err)
 			}
 			return ctx
 		}).
-		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(5*time.Minute)))
+		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(timeout)))
 
 	testenv.Test(t, recoveryTest.Feature())
 }
@@ -477,7 +478,7 @@ func TestInvalidProviderVersionRecovery(t *testing.T) {
 
 				if err := wait.For(
 					openmcpconditions.Match(obj, onboardingConfig, "Reconciled", corev1.ConditionTrue),
-					wait.WithTimeout(5*time.Minute),
+					wait.WithTimeout(timeout),
 				); err != nil {
 					t.Errorf("expected Reconciled=True after updating to valid provider version: %v", err)
 				}
@@ -501,12 +502,12 @@ func TestInvalidProviderVersionRecovery(t *testing.T) {
 			})
 			obj.SetName(mcpName)
 			obj.SetNamespace("default")
-			if err := resources.DeleteObject(ctx, onboardingConfig, obj, wait.WithTimeout(5*time.Minute)); err != nil {
+			if err := resources.DeleteObject(ctx, onboardingConfig, obj, wait.WithTimeout(timeout)); err != nil {
 				t.Errorf("failed to delete Crossplane resource: %v", err)
 			}
 			return ctx
 		}).
-		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(5*time.Minute)))
+		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(timeout)))
 
 	testenv.Test(t, recoveryTest.Feature())
 }
