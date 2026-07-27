@@ -26,12 +26,12 @@ import (
 )
 
 const (
-	mcpName              = "test-mcp"
-	crossplaneNamespace  = "crossplane-system"
-	crossplaneDeployment = "crossplane"
-	providerBTPName      = "provider-btp"
-
-	timeout = 5 * time.Minute
+	mcpName                       = "test-mcp"
+	crossplaneNamespace           = "crossplane-system"
+	crossplaneDeployment          = "crossplane"
+	providerBTPName               = "provider-btp"
+	functionPatchAndTransformName = "function-patch-and-transform"
+  timeout = 5 * time.Minute
 )
 
 func TestServiceProvider(t *testing.T) {
@@ -74,6 +74,9 @@ func TestServiceProvider(t *testing.T) {
 		).
 		Assess("ManagedControlPlane: provider-btp is installed and healthy",
 			crossplaneProviderHealthy(mcpName, providerBTPName),
+		).
+		Assess("ControlPlane: function-patch-and-transform is installed and healthy",
+			crossplaneFunctionHealthy(mcpName, functionPatchAndTransformName),
 		).
 		Teardown(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			onboardingConfig, err := clusterutils.OnboardingConfig()
@@ -154,6 +157,27 @@ func crossplaneProviderHealthy(mcpName, providerName string) features.Func {
 		provider.SetName(providerName)
 		if err := wait.For(openmcpconditions.Match(provider, mcp, "Healthy", corev1.ConditionTrue), wait.WithTimeout(timeout)); err != nil {
 			t.Errorf("crossplane provider %s not healthy on MCP %s: %v", providerName, mcpName, err)
+		}
+		return ctx
+	}
+}
+
+func crossplaneFunctionHealthy(mcpName, functionName string) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		mcp, err := clusterutils.MCPConfig(ctx, c, mcpName)
+		if err != nil {
+			t.Error(err)
+			return ctx
+		}
+		function := &unstructured.Unstructured{}
+		function.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "pkg.crossplane.io",
+			Version: "v1",
+			Kind:    "Function",
+		})
+		function.SetName(functionName)
+		if err := wait.For(openmcpconditions.Match(function, mcp, "Healthy", corev1.ConditionTrue), wait.WithTimeout(5*time.Minute)); err != nil {
+			t.Errorf("crossplane function %s not healthy on ControlPlane %s: %v", functionName, mcpName, err)
 		}
 		return ctx
 	}

@@ -88,6 +88,33 @@ type CrossplaneVersion struct {
 	Image *ImageSpec `json:"image,omitempty"`
 }
 
+// AvailableCrossplaneFunction represents configuration for Crossplane functions in a ProviderConfig of the Service Provider Crossplane.
+type AvailableCrossplaneFunction struct {
+	// Name of the function.
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// Versions of the function that are available for installation.
+	// +kubebuilder:validation:Required
+	Versions []string `json:"versions"`
+
+	// Package is the package name of the function.
+	// +kubebuilder:validation:Required
+	Package string `json:"package"`
+}
+
+// CrossplaneFunctions represents the configuration of Crossplane functions and their image pull secrets.
+type CrossplaneFunctions struct {
+	// AvailableFunctions holds the list of functions that can be configured with the Service Provider Crossplane.
+	// +kubebuilder:validation:Required
+	AvailableFunctions []AvailableCrossplaneFunction `json:"availableFunctions"`
+
+	// Image pull secrets for pulling Crossplane function images from private OCI registries.
+	// If not specified, the image pull secrets from the providers section will be used as a fallback.
+	// +kubebuilder:validation:Optional
+	ImagePullSecrets []commonapi.LocalObjectReference `json:"imagePullSecretRefs,omitempty"`
+}
+
 // ProviderConfigSpec defines the desired state of ProviderConfig.
 type ProviderConfigSpec struct {
 	CrossplaneVersions []CrossplaneVersion `json:"versions"`
@@ -95,6 +122,10 @@ type ProviderConfigSpec struct {
 	// Providers holds the configuration for Crossplane providers that can be installed via the Service Provider Crossplane.
 	// +kubebuilder:validation:Optional
 	Providers CrossplaneProviders `json:"providers,omitempty"`
+
+	// Functions holds the configuration for Crossplane functions that can be installed via the Service Provider Crossplane.
+	// +kubebuilder:validation:Optional
+	Functions CrossplaneFunctions `json:"functions,omitempty"`
 
 	// CABundleRef is a reference to a config map containing certificate bundle.
 	// It will be installed on the ManagedControlPlane and configured for Crossplane runtime and providers.
