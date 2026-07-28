@@ -100,6 +100,8 @@ spec:
         package: "xpkg.upbound.io/crossplane-contrib/function-patch-and-transform"
         versions:
           - "v0.8.0"
+    imagePullSecretRefs:
+      - name: secretforprivatefunctions
 
   providers:
     availableProviders:
