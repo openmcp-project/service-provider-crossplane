@@ -2,6 +2,8 @@
 
 # service-provider-crossplane
 
+Service provider Crossplane manages the lifecycle of Crossplane instances, Crossplane providers and Crossplane functions in a `ControlPlane`.
+
 ## Quality Criteria
 
 [![Quality: Incubating](https://img.shields.io/badge/Quality-Incubating-3d9970?style=flat-square&labelColor=555)](https://open-control-plane.io/developers/serviceprovider/quality-criteria)
@@ -18,10 +20,6 @@
 | Ownership and maintenance docs    |   ✅    |                                                                                                                                                                                                                                                                             |
 
 See the [OpenControlPlane Quality Criteria](https://open-control-plane.io/developers/serviceprovider/quality-criteria) for definitions.
-
-## About this project
-
-Service provider Crossplane manages the lifecycle of Crossplane instances and Crossplane providers in a `ManagedControlPlane`.
 
 ## 🏗️ Installation of the Service Provider Crossplane
 
@@ -66,7 +64,7 @@ spec:
 ## 📖 Usage
 
 ### Configure a `ProviderConfig`
-A `ProviderConfig` is an API where you can configure an allow-list of Crossplane and provider installations in your `ManagedControlPlane`.
+A `ProviderConfig` is an API where you can configure an allow-list of Crossplane, provider and function installations in your `ControlPlane`.
 The `ProviderConfig` is stored in the Platform cluster and therefore in the responsibility realm of the platform owner.
 The name of the `ProviderConfig` must match the `--provider-name` argument that is passed to the service provider crossplane operator.
 
@@ -96,6 +94,13 @@ spec:
         secretRef: # optional
           name: xyz
 
+  functions:
+    availableFunctions:
+      - name: function-patch-and-transform
+        package: "xpkg.upbound.io/crossplane-contrib/function-patch-and-transform"
+        versions:
+          - "v0.8.0"
+
   providers:
     availableProviders:
       - name: provider-kubernetes
@@ -124,6 +129,9 @@ spec:
   providers:
     - name: provider-kubernetes
       version: v0.16.0 # allowed version from ProviderConfig
+  functions:
+    - name: function-patch-and-transform
+      version: v0.8.0 # allowed version from ProviderConfig
 ```
 
 ## 📚 Documentation
