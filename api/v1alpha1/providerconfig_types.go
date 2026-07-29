@@ -23,76 +23,26 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// AvailableCrossplaneProvider represents configuration for Crossplane providers in a ProviderConfig of the Service Provider Crossplane.
-type AvailableCrossplaneProvider struct {
-	// Name of the provider.
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-
-	// Version of the provider to install.
-	// +kubebuilder:validation:Required
-	Versions []string `json:"versions"`
-
-	// Package is the package name of the provider.
-	// +kubebuilder:validation:Required
-	Package string `json:"package"`
-}
-
-// CrossplaneProviders represents the configutation of Crossplane providers and and their image pull secrets.
+// CrossplaneProviders represents configuration shared by all Crossplane providers.
 type CrossplaneProviders struct {
-	// AvailableProviders holds the list of providers that can be configured with the Service Provider Crossplane.
-	// +kubebuilder:validation:Required
-	AvailableProviders []AvailableCrossplaneProvider `json:"availableProviders"`
-
 	// Image pull secrets for pulling Crossplane provider images from private OCI registries.
 	// +kubebuilder:validation:Optional
 	ImagePullSecrets []commonapi.LocalObjectReference `json:"imagePullSecretRefs,omitempty"`
 }
 
-// ChartSpec defines the location and access of a Helm chart.
-type ChartSpec struct {
-	// URL is a reference to an OCI artifact repository hosted on a remote container registry where the Helm chart is stored.
-	// The URL must NOT start with "oci://".
-	// +kubebuilder:validation:Required
-	URL string `json:"url"`
-
-	// SecretRef references a secret containing credentials to access the OCI artifact repository.
-	// +kubebuilder:validation:Optional
-	SecretRef commonapi.LocalObjectReference `json:"secretRef,omitempty"`
-}
-
-// ImageSpec defines the location and access a container image.
-type ImageSpec struct {
-	// URL is a reference to the container image location.
-	// +kubebuilder:validation:Required
-	URL string `json:"url"`
-
-	// SecretRef references a secret containing credentials to access the container image repository.
-	// +kubebuilder:validation:Optional
-	SecretRef commonapi.LocalObjectReference `json:"secretRef,omitempty"`
-}
-
-// CrossplaneVersion defines a specific version of Crossplane along with its chart and image information.
-type CrossplaneVersion struct {
-	// Version of Crossplane.
-	// +kubebuilder:validation:Required
-	Version string `json:"version"`
-
-	// Chart holds the Helm chart information for this Crossplane version.
-	// +kubebuilder:validation:Required
-	Chart ChartSpec `json:"chart"`
-
-	// Image holds the Crossplane controller image information for this Crossplane version.
-	// If not specified, the default image configured in the Helm chart will be used.
-	// +kubebuilder:validation:Optional
-	Image *ImageSpec `json:"image,omitempty"`
-}
-
 // ProviderConfigSpec defines the desired state of ProviderConfig.
 type ProviderConfigSpec struct {
-	CrossplaneVersions []CrossplaneVersion `json:"versions"`
+	// CrossplaneDiscoveryName is the name of the Discovery resource (delivery.ocm.software/v1alpha1)
+	// on the platform cluster that publishes the available Crossplane versions.
+	// +kubebuilder:validation:Required
+	CrossplaneDiscoveryName string `json:"crossplaneDiscoveryName"`
 
-	// Providers holds the configuration for Crossplane providers that can be installed via the Service Provider Crossplane.
+	// ProviderDiscoverySelector selects the Discovery resources (delivery.ocm.software/v1alpha1)
+	// on the platform cluster that publish the available Crossplane provider versions.
+	// +kubebuilder:validation:Required
+	ProviderDiscoverySelector metav1.LabelSelector `json:"providerDiscoverySelector"`
+
+	// Providers holds configuration shared by all Crossplane providers installed via the Service Provider Crossplane.
 	// +kubebuilder:validation:Optional
 	Providers CrossplaneProviders `json:"providers,omitempty"`
 

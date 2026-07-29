@@ -51,6 +51,7 @@ import (
 
 	"github.com/openmcp-project/service-provider-crossplane/api/crds"
 	"github.com/openmcp-project/service-provider-crossplane/internal/controller"
+	"github.com/openmcp-project/service-provider-crossplane/internal/discovery"
 	"github.com/openmcp-project/service-provider-crossplane/internal/scheme"
 	// +kubebuilder:scaffold:imports
 )
@@ -369,6 +370,9 @@ func runCommand(cmd *cobra.Command, _ []string) error {
 	// Create a buffered channel for events between reconcilers
 	reconcileEventsCh := make(chan event.GenericEvent, 128)
 
+	// Shared store holding the component versions discovered at runtime.
+	versionStore := discovery.NewStore()
+
 	crossplaneReconciler := &controller.CrossplaneReconciler{
 		PlatformCluster:      platformCluster,
 		OnboardingCluster:    onboardingCluster,
@@ -376,6 +380,7 @@ func runCommand(cmd *cobra.Command, _ []string) error {
 		RecieveEventsChannel: reconcileEventsCh,
 		SecretsNamespace:     os.Getenv(openmcpconstv1alpha1.EnvVariablePodNamespace),
 		ProviderName:         providerName,
+		VersionStore:         versionStore,
 	}
 	if err := crossplaneReconciler.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create controller Crossplane: %w", err)
@@ -388,6 +393,18 @@ func runCommand(cmd *cobra.Command, _ []string) error {
 	}
 	if err := providerConfigReconciler.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("unable to create controller Provider: %w", err)
+	}
+
+	discoveryReconciler := &controller.DiscoveryReconciler{
+		PlatformCluster:   platformCluster,
+		OnboardingCluster: onboardingCluster,
+		VersionStore:      versionStore,
+		SendEventsChannel: reconcileEventsCh,
+		ProviderName:      providerName,
+		Namespace:         os.Getenv(openmcpconstv1alpha1.EnvVariablePodNamespace),
+	}
+	if err := discoveryReconciler.SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("unable to create controller Discovery: %w", err)
 	}
 
 	// +kubebuilder:scaffold:builder

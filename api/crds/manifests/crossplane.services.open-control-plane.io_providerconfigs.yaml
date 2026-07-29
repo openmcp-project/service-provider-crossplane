@@ -70,35 +70,63 @@ spec:
                 - key
                 type: object
                 x-kubernetes-map-type: atomic
-              providers:
-                description: Providers holds the configuration for Crossplane providers
-                  that can be installed via the Service Provider Crossplane.
+              crossplaneDiscoveryName:
+                description: |-
+                  CrossplaneDiscoveryName is the name of the discovery resource (currently a ConfigMap) on the
+                  platform cluster that publishes the available Crossplane versions.
+                type: string
+              providerDiscoverySelector:
+                description: |-
+                  ProviderDiscoverySelector selects the discovery resources (currently ConfigMaps) on the
+                  platform cluster that publish the available Crossplane provider versions.
                 properties:
-                  availableProviders:
-                    description: AvailableProviders holds the list of providers that
-                      can be configured with the Service Provider Crossplane.
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
                     items:
-                      description: AvailableCrossplaneProvider represents configuration
-                        for Crossplane providers in a ProviderConfig of the Service
-                        Provider Crossplane.
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
                       properties:
-                        name:
-                          description: Name of the provider.
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
                           type: string
-                        package:
-                          description: Package is the package name of the provider.
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
                           type: string
-                        versions:
-                          description: Version of the provider to install.
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
                           items:
                             type: string
                           type: array
+                          x-kubernetes-list-type: atomic
                       required:
-                      - name
-                      - package
-                      - versions
+                      - key
+                      - operator
                       type: object
                     type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
+              providers:
+                description: Providers holds configuration shared by all Crossplane
+                  providers installed via the Service Provider Crossplane.
+                properties:
                   imagePullSecretRefs:
                     description: Image pull secrets for pulling Crossplane provider
                       images from private OCI registries.
@@ -118,77 +146,10 @@ spec:
                       type: object
                       x-kubernetes-map-type: atomic
                     type: array
-                required:
-                - availableProviders
                 type: object
-              versions:
-                items:
-                  description: CrossplaneVersion defines a specific version of Crossplane
-                    along with its chart and image information.
-                  properties:
-                    chart:
-                      description: Chart holds the Helm chart information for this
-                        Crossplane version.
-                      properties:
-                        secretRef:
-                          description: SecretRef references a secret containing credentials
-                            to access the OCI artifact repository.
-                          properties:
-                            name:
-                              default: ""
-                              description: |-
-                                Name of the referent.
-                                This field is effectively required, but due to backwards compatibility is
-                                allowed to be empty. Instances of this type with an empty value here are
-                                almost certainly wrong.
-                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                              type: string
-                          type: object
-                          x-kubernetes-map-type: atomic
-                        url:
-                          description: |-
-                            URL is a reference to an OCI artifact repository hosted on a remote container registry where the Helm chart is stored.
-                            The URL must NOT start with "oci://".
-                          type: string
-                      required:
-                      - url
-                      type: object
-                    image:
-                      description: |-
-                        Image holds the Crossplane controller image information for this Crossplane version.
-                        If not specified, the default image configured in the Helm chart will be used.
-                      properties:
-                        secretRef:
-                          description: SecretRef references a secret containing credentials
-                            to access the container image repository.
-                          properties:
-                            name:
-                              default: ""
-                              description: |-
-                                Name of the referent.
-                                This field is effectively required, but due to backwards compatibility is
-                                allowed to be empty. Instances of this type with an empty value here are
-                                almost certainly wrong.
-                                More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                              type: string
-                          type: object
-                          x-kubernetes-map-type: atomic
-                        url:
-                          description: URL is a reference to the container image location.
-                          type: string
-                      required:
-                      - url
-                      type: object
-                    version:
-                      description: Version of Crossplane.
-                      type: string
-                  required:
-                  - chart
-                  - version
-                  type: object
-                type: array
             required:
-            - versions
+            - crossplaneDiscoveryName
+            - providerDiscoverySelector
             type: object
           status:
             description: status defines the observed state of ProviderConfig

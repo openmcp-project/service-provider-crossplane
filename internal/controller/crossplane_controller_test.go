@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	crossplanev1beta1 "github.com/crossplane/crossplane/apis/v2/pkg/v1beta1"
+	"github.com/openmcp-project/control-plane-operator/api/v1beta1"
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
@@ -40,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
+	"github.com/openmcp-project/service-provider-crossplane/internal/discovery"
 	"github.com/openmcp-project/service-provider-crossplane/internal/scheme"
 	"github.com/openmcp-project/service-provider-crossplane/pkg/component"
 )
@@ -166,10 +168,25 @@ func TestDeduplicateSecretRefs(t *testing.T) {
 	}
 }
 
+// newCrossplaneStore is a small test helper that seeds a discovery.Store with the crossplane and
+// provider versions the test cases need. The pullSecrets map is keyed by version and, when set,
+// provides the single pull-secret name used for both the chart and image of that version.
+func newCrossplaneStore(crossplaneVersions map[string]v1beta1.ComponentVersion, crossplanePullSecrets map[string]string, providers map[string]map[string]v1beta1.ComponentVersion) *discovery.Store {
+	store := discovery.NewStore()
+	if len(crossplaneVersions) > 0 {
+		store.Set(component.CrossplaneRelease, crossplaneVersions, crossplanePullSecrets)
+	}
+	for name, versions := range providers {
+		store.Set(name, versions, nil)
+	}
+	return store
+}
+
 func Test_buildComponents(t *testing.T) {
 	type args struct {
 		ctx             context.Context
 		client          client.Client
+		store           *discovery.Store
 		xp              *v1alpha1.Crossplane
 		pc              *v1alpha1.ProviderConfig
 		enabled         bool
@@ -187,6 +204,17 @@ func Test_buildComponents(t *testing.T) {
 				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
 				client:          nil,
 				setPodNamespace: true,
+				store: newCrossplaneStore(
+					map[string]v1beta1.ComponentVersion{
+						"v1.0.0": {Version: "v1.0.0", OCIURL: "https://charts.example.com/1", DockerRef: "https://images.example.com/1"},
+						"v2.0.0": {Version: "v2.0.0", OCIURL: "https://charts.example.com/2", DockerRef: "https://images.example.com/2"},
+					},
+					nil,
+					map[string]map[string]v1beta1.ComponentVersion{
+						"provider-1": {"v0.1.0": {Version: "v0.1.0", DockerRef: "crossplane/provider-aws:v0.1.0"}},
+						"provider-2": {"v0.1.0": {Version: "v0.1.0", DockerRef: "crossplane/provider-other:v0.1.0"}},
+					},
+				),
 				xp: &v1alpha1.Crossplane{
 					Spec: v1alpha1.CrossplaneSpec{
 						Version:   "v1.0.0",
@@ -194,26 +222,7 @@ func Test_buildComponents(t *testing.T) {
 					},
 				},
 				pc: &v1alpha1.ProviderConfig{
-					Spec: v1alpha1.ProviderConfigSpec{
-						CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-							{
-								Version: "v1.0.0",
-								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
-							},
-							{
-								Version: "v2.0.0",
-								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2"},
-								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/2"},
-							},
-						},
-						Providers: v1alpha1.CrossplaneProviders{
-							AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
-								{Name: "provider-1", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws:v0.1.0"},
-								{Name: "provider-2", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-other:v0.1.0"},
-							},
-						},
-					},
+					Spec: v1alpha1.ProviderConfigSpec{},
 				},
 				enabled: true,
 			},
@@ -243,6 +252,18 @@ func Test_buildComponents(t *testing.T) {
 				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
 				client:          nil,
 				setPodNamespace: true,
+				// A single discovered pull-secret name per version is used for both chart and image.
+				store: newCrossplaneStore(
+					map[string]v1beta1.ComponentVersion{
+						"v1.0.0": {Version: "v1.0.0", OCIURL: "https://charts.example.com/1", DockerRef: "https://images.example.com/1"},
+						"v2.0.0": {Version: "v2.0.0", OCIURL: "https://charts.example.com/2", DockerRef: "https://images.example.com/2"},
+					},
+					map[string]string{"v1.0.0": "cp-secret", "v2.0.0": "other-cp-secret"},
+					map[string]map[string]v1beta1.ComponentVersion{
+						"provider-1": {"v0.1.0": {Version: "v0.1.0", DockerRef: "crossplane/provider-aws:v0.1.0"}},
+						"provider-2": {"v0.1.0": {Version: "v0.1.0", DockerRef: "crossplane/provider-other:v0.1.0"}},
+					},
+				),
 				xp: &v1alpha1.Crossplane{
 					Spec: v1alpha1.CrossplaneSpec{
 						Version:   "v2.0.0",
@@ -251,23 +272,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				pc: &v1alpha1.ProviderConfig{
 					Spec: v1alpha1.ProviderConfigSpec{
-						CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-							{
-								Version: "v1.0.0",
-								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
-							},
-							{
-								Version: "v2.0.0",
-								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-chart-secret"}},
-								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-image-secret"}},
-							},
-						},
 						Providers: v1alpha1.CrossplaneProviders{
-							AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
-								{Name: "provider-1", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws:v0.1.0"},
-								{Name: "provider-2", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-other:v0.1.0"},
-							},
 							ImagePullSecrets: []commonapi.LocalObjectReference{{Name: "provider-image-secret"}, {Name: "other-provider-image-secret"}},
 						},
 					},
@@ -276,12 +281,13 @@ func Test_buildComponents(t *testing.T) {
 			},
 			want: []juggler.Component{
 				// Components expected to be built containing ALL (platform)secrets from providerConfig,
-				// regardless of whether they are used by Crossplane or its providers
+				// regardless of whether they are used by Crossplane or its providers. The crossplane
+				// chart AND image pull secret both come from the single discovered pull-secret name.
 				&component.Crossplane{
 					Enabled:              true,
 					Config:               &v1alpha1.CrossplaneSpec{Version: "v2.0.0", Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}}},
-					ChartPullSecretName:  fmt.Sprintf("%s%s", secretNamePrefix, "other-chart-secret"),
-					ImagePullSecretNames: []string{"other-image-secret"},
+					ChartPullSecretName:  fmt.Sprintf("%s%s", secretNamePrefix, "other-cp-secret"),
+					ImagePullSecretNames: []string{"other-cp-secret"},
 				},
 				&component.CrossplaneProvider{
 					Enabled:     true,
@@ -290,14 +296,14 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.PlatformSecret{
 					SourceClient: nil,
-					Source:       client.ObjectKey{Name: "other-chart-secret", Namespace: "pod-namespace"},
-					Target:       client.ObjectKey{Name: fmt.Sprintf("%s%s", secretNamePrefix, "other-chart-secret"), Namespace: "tenant-namespace"},
+					Source:       client.ObjectKey{Name: "other-cp-secret", Namespace: "pod-namespace"},
+					Target:       client.ObjectKey{Name: fmt.Sprintf("%s%s", secretNamePrefix, "other-cp-secret"), Namespace: "tenant-namespace"},
 					Enabled:      true,
 				},
 				&component.Secret{
 					SourceClient: nil,
-					Source:       client.ObjectKey{Name: "other-image-secret", Namespace: "pod-namespace"},
-					Target:       client.ObjectKey{Name: "other-image-secret", Namespace: component.CrossplaneNamespace},
+					Source:       client.ObjectKey{Name: "other-cp-secret", Namespace: "pod-namespace"},
+					Target:       client.ObjectKey{Name: "other-cp-secret", Namespace: component.CrossplaneNamespace},
 					Enabled:      true,
 				},
 				&component.Secret{
@@ -326,6 +332,19 @@ func Test_buildComponents(t *testing.T) {
 				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
 				client:          nil,
 				setPodNamespace: true,
+				// The discovered pull secret matches the provider ImagePullSecret, so the resulting
+				// Secret component is deduplicated.
+				store: newCrossplaneStore(
+					map[string]v1beta1.ComponentVersion{
+						"v1.0.0": {Version: "v1.0.0", OCIURL: "https://charts.example.com/1", DockerRef: "https://images.example.com/1"},
+						"v2.0.0": {Version: "v2.0.0", OCIURL: "https://charts.example.com/2", DockerRef: "https://images.example.com/2"},
+					},
+					map[string]string{"v1.0.0": "image-secret", "v2.0.0": "image-secret"},
+					map[string]map[string]v1beta1.ComponentVersion{
+						"provider-1": {"v0.1.0": {Version: "v0.1.0", DockerRef: "crossplane/provider-aws:v0.1.0"}},
+						"provider-2": {"v0.1.0": {Version: "v0.1.0", DockerRef: "crossplane/provider-other:v0.1.0"}},
+					},
+				),
 				xp: &v1alpha1.Crossplane{
 					Spec: v1alpha1.CrossplaneSpec{
 						Version:   "v1.0.0",
@@ -334,23 +353,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				pc: &v1alpha1.ProviderConfig{
 					Spec: v1alpha1.ProviderConfigSpec{
-						CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-							{
-								Version: "v1.0.0",
-								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
-							},
-							{
-								Version: "v2.0.0",
-								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
-							},
-						},
 						Providers: v1alpha1.CrossplaneProviders{
-							AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
-								{Name: "provider-1", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws:v0.1.0"},
-								{Name: "provider-2", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-other:v0.1.0"},
-							},
 							ImagePullSecrets: []commonapi.LocalObjectReference{{Name: "image-secret"}},
 						},
 					},
@@ -366,7 +369,7 @@ func Test_buildComponents(t *testing.T) {
 						Version:   "v1.0.0",
 						Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
 					},
-					ChartPullSecretName:  fmt.Sprintf("%s%s", secretNamePrefix, "chart-secret"),
+					ChartPullSecretName:  fmt.Sprintf("%s%s", secretNamePrefix, "image-secret"),
 					ImagePullSecretNames: []string{"image-secret"},
 				},
 				&component.CrossplaneProvider{
@@ -376,8 +379,8 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.PlatformSecret{
 					SourceClient: nil,
-					Source:       client.ObjectKey{Name: "chart-secret", Namespace: "pod-namespace"},
-					Target:       client.ObjectKey{Name: fmt.Sprintf("%s%s", secretNamePrefix, "chart-secret"), Namespace: "tenant-namespace"},
+					Source:       client.ObjectKey{Name: "image-secret", Namespace: "pod-namespace"},
+					Target:       client.ObjectKey{Name: fmt.Sprintf("%s%s", secretNamePrefix, "image-secret"), Namespace: "tenant-namespace"},
 					Enabled:      true,
 				},
 				&component.Secret{
@@ -400,6 +403,17 @@ func Test_buildComponents(t *testing.T) {
 				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
 				client:          nil,
 				setPodNamespace: true,
+				store: newCrossplaneStore(
+					map[string]v1beta1.ComponentVersion{
+						"v1.0.0": {Version: "v1.0.0", OCIURL: "https://charts.example.com/foo", DockerRef: "https://images.example.com/foo"},
+						"v2.0.0": {Version: "v2.0.0", OCIURL: "https://charts.example.com/2", DockerRef: "https://images.example.com/2"},
+					},
+					map[string]string{"v1.0.0": "cp-secret", "v2.0.0": "other-cp-secret"},
+					map[string]map[string]v1beta1.ComponentVersion{
+						"provider-1": {"v0.1.0": {Version: "v0.1.0", DockerRef: "crossplane/provider-aws:v0.1.0"}},
+						"provider-2": {"v0.1.0": {Version: "v0.1.0", DockerRef: "crossplane/provider-other:v0.1.0"}},
+					},
+				),
 				xp: &v1alpha1.Crossplane{
 					Spec: v1alpha1.CrossplaneSpec{
 						Version:   "v1.0.0",
@@ -408,23 +422,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				pc: &v1alpha1.ProviderConfig{
 					Spec: v1alpha1.ProviderConfigSpec{
-						CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-							{
-								Version: "v1.0.0",
-								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/foo", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/foo", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
-							},
-							{
-								Version: "v2.0.0",
-								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-chart-secret"}},
-								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-image-secret"}},
-							},
-						},
 						Providers: v1alpha1.CrossplaneProviders{
-							AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
-								{Name: "provider-1", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws:v0.1.0"},
-								{Name: "provider-2", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-other:v0.1.0"},
-							},
 							ImagePullSecrets: []commonapi.LocalObjectReference{{Name: "provider-image-secret"}, {Name: "other-provider-image-secret"}},
 						},
 					},
@@ -440,8 +438,8 @@ func Test_buildComponents(t *testing.T) {
 						Version:   "v1.0.0",
 						Providers: []*v1alpha1.CrossplaneProviderConfig{{Name: "provider-1", Version: "v0.1.0"}},
 					},
-					ChartPullSecretName:  fmt.Sprintf("%s%s", secretNamePrefix, "chart-secret"),
-					ImagePullSecretNames: []string{"image-secret"},
+					ChartPullSecretName:  fmt.Sprintf("%s%s", secretNamePrefix, "cp-secret"),
+					ImagePullSecretNames: []string{"cp-secret"},
 				},
 				&component.CrossplaneProvider{
 					Enabled:     false,
@@ -450,14 +448,14 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.PlatformSecret{
 					SourceClient: nil,
-					Source:       client.ObjectKey{Name: "chart-secret", Namespace: "pod-namespace"},
-					Target:       client.ObjectKey{Name: fmt.Sprintf("%s%s", secretNamePrefix, "chart-secret"), Namespace: "tenant-namespace"},
+					Source:       client.ObjectKey{Name: "cp-secret", Namespace: "pod-namespace"},
+					Target:       client.ObjectKey{Name: fmt.Sprintf("%s%s", secretNamePrefix, "cp-secret"), Namespace: "tenant-namespace"},
 					Enabled:      false,
 				},
 				&component.Secret{
 					SourceClient: nil,
-					Source:       client.ObjectKey{Name: "image-secret", Namespace: "pod-namespace"},
-					Target:       client.ObjectKey{Name: "image-secret", Namespace: component.CrossplaneNamespace},
+					Source:       client.ObjectKey{Name: "cp-secret", Namespace: "pod-namespace"},
+					Target:       client.ObjectKey{Name: "cp-secret", Namespace: component.CrossplaneNamespace},
 					Enabled:      false,
 				},
 				&component.Secret{
@@ -486,6 +484,15 @@ func Test_buildComponents(t *testing.T) {
 				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
 				client:          nil,
 				setPodNamespace: true,
+				store: newCrossplaneStore(
+					map[string]v1beta1.ComponentVersion{
+						"v1.0.0": {Version: "v1.0.0", OCIURL: "https://charts.example.com/1", DockerRef: "https://images.example.com/1"},
+					},
+					nil,
+					map[string]map[string]v1beta1.ComponentVersion{
+						"provider-1": {"v0.1.0": {Version: "v0.1.0", DockerRef: "crossplane/provider-aws:v0.1.0"}},
+					},
+				),
 				xp: &v1alpha1.Crossplane{
 					Spec: v1alpha1.CrossplaneSpec{
 						Version:   "v1.0.0",
@@ -494,18 +501,6 @@ func Test_buildComponents(t *testing.T) {
 				},
 				pc: &v1alpha1.ProviderConfig{
 					Spec: v1alpha1.ProviderConfigSpec{
-						CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-							{
-								Version: "v1.0.0",
-								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
-							},
-						},
-						Providers: v1alpha1.CrossplaneProviders{
-							AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
-								{Name: "provider-1", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws:v0.1.0"},
-							},
-						},
 						CABundleRef: &corev1.ConfigMapKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
 								Name: "my-ca-bundle",
@@ -606,6 +601,17 @@ func Test_buildComponents(t *testing.T) {
 				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
 				client:          nil,
 				setPodNamespace: false,
+				store: newCrossplaneStore(
+					map[string]v1beta1.ComponentVersion{
+						"v1.0.0": {Version: "v1.0.0", OCIURL: "https://charts.example.com/foo", DockerRef: "https://images.example.com/foo"},
+						"v2.0.0": {Version: "v2.0.0", OCIURL: "https://charts.example.com/2", DockerRef: "https://images.example.com/2"},
+					},
+					map[string]string{"v1.0.0": "cp-secret", "v2.0.0": "other-cp-secret"},
+					map[string]map[string]v1beta1.ComponentVersion{
+						"provider-1": {"v0.1.0": {Version: "v0.1.0", DockerRef: "crossplane/provider-aws:v0.1.0"}},
+						"provider-2": {"v0.1.0": {Version: "v0.1.0", DockerRef: "crossplane/provider-other:v0.1.0"}},
+					},
+				),
 				xp: &v1alpha1.Crossplane{
 					Spec: v1alpha1.CrossplaneSpec{
 						Version:   "v1.0.0",
@@ -614,23 +620,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				pc: &v1alpha1.ProviderConfig{
 					Spec: v1alpha1.ProviderConfigSpec{
-						CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-							{
-								Version: "v1.0.0",
-								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/foo", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/foo", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
-							},
-							{
-								Version: "v2.0.0",
-								Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-chart-secret"}},
-								Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "other-image-secret"}},
-							},
-						},
 						Providers: v1alpha1.CrossplaneProviders{
-							AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
-								{Name: "provider-1", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws:v0.1.0"},
-								{Name: "provider-2", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-other:v0.1.0"},
-							},
 							ImagePullSecrets: []commonapi.LocalObjectReference{{Name: "provider-image-secret"}, {Name: "other-provider-image-secret"}},
 						},
 					},
@@ -640,15 +630,53 @@ func Test_buildComponents(t *testing.T) {
 			want:    nil,
 			wantErr: errors.New("environment variable POD_NAMESPACE not set - cannot determine source namespace for secrets"),
 		},
+		{
+			name: "Error when requested Crossplane version is not available",
+			args: args{
+				ctx:             rcontext.WithTenantNamespace(context.Background(), "tenant-namespace"),
+				client:          nil,
+				setPodNamespace: true,
+				store: newCrossplaneStore(
+					map[string]v1beta1.ComponentVersion{
+						"v1.0.0": {Version: "v1.0.0", OCIURL: "https://charts.example.com/1", DockerRef: "https://images.example.com/1"},
+					},
+					nil,
+					nil,
+				),
+				xp: &v1alpha1.Crossplane{
+					Spec: v1alpha1.CrossplaneSpec{
+						Version: "v9.9.9",
+					},
+				},
+				pc:      &v1alpha1.ProviderConfig{Spec: v1alpha1.ProviderConfigSpec{}},
+				enabled: true,
+			},
+			want:    nil,
+			wantErr: errutils.ErrInvalidUserInput,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.args.setPodNamespace {
 				t.Setenv("POD_NAMESPACE", "pod-namespace")
 			}
-			got, err := buildComponents(tt.args.ctx, tt.args.client, tt.args.xp, tt.args.pc, tt.args.enabled)
-			if err != nil && tt.wantErr == nil && err.Error() != tt.wantErr.Error() {
-				t.Errorf("buildComponents() error = %v, wantErr %v", err, tt.wantErr)
+			got, err := buildComponents(tt.args.ctx, tt.args.client, tt.args.store, tt.args.xp, tt.args.pc, tt.args.enabled)
+			if tt.wantErr != nil {
+				if err == nil {
+					t.Errorf("buildComponents() expected error %v, got nil", tt.wantErr)
+					return
+				}
+				if errors.Is(tt.wantErr, errutils.ErrInvalidUserInput) {
+					if !errors.Is(err, errutils.ErrInvalidUserInput) {
+						t.Errorf("buildComponents() error = %v, want ErrInvalidUserInput", err)
+					}
+				} else if err.Error() != tt.wantErr.Error() {
+					t.Errorf("buildComponents() error = %v, wantErr %v", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("buildComponents() unexpected error = %v", err)
 				return
 			}
 			if len(got) != len(tt.want) {
@@ -672,32 +700,17 @@ func Test_buildComponents(t *testing.T) {
 	}
 }
 
-func Test_extractHelmChartPullSecretForVersion(t *testing.T) {
-	versions := []v1alpha1.CrossplaneVersion{
-		{Version: "v1.0.0", Chart: v1alpha1.ChartSpec{SecretRef: commonapi.LocalObjectReference{Name: "secret-1"}}},
-		{Version: "v2.0.0", Chart: v1alpha1.ChartSpec{SecretRef: commonapi.LocalObjectReference{Name: "secret-2"}}},
-	}
-
-	_, err := extractHelmChartPullSecretForVersion("v3.0.0", versions)
-	assert.Error(t, err)
-	assert.Nil(t, errutils.IgnoreInvalidUserInput(err), "unsupported version error should be treated as invalid user input")
-}
-
 func Test_GetResolverFunc(t *testing.T) {
-	pc := &v1alpha1.ProviderConfig{
-		Spec: v1alpha1.ProviderConfigSpec{
-			CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-				{Version: "v1.0.0", Chart: v1alpha1.ChartSpec{URL: "oci://charts/crossplane:v1.0.0"}},
-			},
-			Providers: v1alpha1.CrossplaneProviders{
-				AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
-					{Name: "provider-aws", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws"},
-				},
-			},
-		},
-	}
-	r := &CrossplaneReconciler{}
-	resolve := r.GetResolverFunc(pc)
+	store := discovery.NewStore()
+	store.Set(component.CrossplaneRelease, map[string]v1beta1.ComponentVersion{
+		"v1.0.0": {Version: "v1.0.0", OCIURL: "oci://charts/crossplane:v1.0.0"},
+	}, nil)
+	store.Set("provider-aws", map[string]v1beta1.ComponentVersion{
+		"v0.1.0": {Version: "v0.1.0", DockerRef: "crossplane/provider-aws:v0.1.0"},
+	}, nil)
+
+	r := &CrossplaneReconciler{VersionStore: store}
+	resolve := r.GetResolverFunc()
 
 	tests := []struct {
 		name          string
@@ -725,54 +738,48 @@ func Test_GetResolverFunc(t *testing.T) {
 }
 
 func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
-	pc := &v1alpha1.ProviderConfig{
-		Spec: v1alpha1.ProviderConfigSpec{
-			CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-				{Version: "v1.0.0", Chart: v1alpha1.ChartSpec{URL: "oci://charts/crossplane:v1.0.0"}},
-			},
-			Providers: v1alpha1.CrossplaneProviders{
-				AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
-					{Name: "provider-kubernetes", Versions: []string{"v1.3.0"}, Package: "registry.example.com/channel-a/provider-kubernetes"},
-					{Name: "provider-kubernetes", Versions: []string{"v1.9.0"}, Package: "registry.example.com/channel-b/provider-kubernetes"},
-					{Name: "provider-kubernetes", Versions: []string{"v2.0.0"}, Package: "registry.example.com/channel-c/provider-kubernetes"},
-				},
-			},
-		},
-	}
-	r := &CrossplaneReconciler{}
-	resolve := r.GetResolverFunc(pc)
+	// With the version store a provider name maps to a single set of versions, so the concept of
+	// duplicate provider entries no longer applies. Seed the store with the versions available for
+	// a single provider and assert resolution succeeds for present versions and fails otherwise.
+	store := discovery.NewStore()
+	store.Set("provider-kubernetes", map[string]v1beta1.ComponentVersion{
+		"v1.3.0": {Version: "v1.3.0", DockerRef: "registry.example.com/channel-a/provider-kubernetes:v1.3.0"},
+		"v1.9.0": {Version: "v1.9.0", DockerRef: "registry.example.com/channel-b/provider-kubernetes:v1.9.0"},
+		"v2.0.0": {Version: "v2.0.0", DockerRef: "registry.example.com/channel-c/provider-kubernetes:v2.0.0"},
+	}, nil)
+
+	r := &CrossplaneReconciler{VersionStore: store}
+	resolve := r.GetResolverFunc()
 
 	tests := []struct {
-		name            string
-		version         string
-		wantErr         bool
-		wantDockerRef   string
-		wantVersion     string
-		wantErrContains []string
+		name          string
+		version       string
+		wantErr       bool
+		wantDockerRef string
+		wantVersion   string
 	}{
 		{
-			name:          "resolves version from first entry",
+			name:          "resolves first version",
 			version:       "v1.3.0",
 			wantDockerRef: "registry.example.com/channel-a/provider-kubernetes:v1.3.0",
 			wantVersion:   "v1.3.0",
 		},
 		{
-			name:          "resolves version from second entry",
+			name:          "resolves second version",
 			version:       "v1.9.0",
 			wantDockerRef: "registry.example.com/channel-b/provider-kubernetes:v1.9.0",
 			wantVersion:   "v1.9.0",
 		},
 		{
-			name:          "resolves version from third entry",
+			name:          "resolves third version",
 			version:       "v2.0.0",
 			wantDockerRef: "registry.example.com/channel-c/provider-kubernetes:v2.0.0",
 			wantVersion:   "v2.0.0",
 		},
 		{
-			name:            "error aggregates versions from all entries with the same name",
-			version:         "v9.9.9",
-			wantErr:         true,
-			wantErrContains: []string{"v1.3.0", "v1.9.0", "v2.0.0"},
+			name:    "error for unknown version",
+			version: "v9.9.9",
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -781,9 +788,6 @@ func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, errutils.IgnoreInvalidUserInput(err), "version resolver error should be treated as invalid user input")
-				for _, s := range tt.wantErrContains {
-					assert.Contains(t, err.Error(), s)
-				}
 				return
 			}
 			assert.NoError(t, err)
@@ -791,42 +795,25 @@ func Test_GetResolverFunc_DuplicateProviderNames(t *testing.T) {
 			assert.Equal(t, tt.wantVersion, comp.Version)
 		})
 	}
-
-	t.Run("first entry wins when same version appears in multiple entries", func(t *testing.T) {
-		pcDup := &v1alpha1.ProviderConfig{
-			Spec: v1alpha1.ProviderConfigSpec{
-				Providers: v1alpha1.CrossplaneProviders{
-					AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
-						{Name: "provider-kubernetes", Versions: []string{"v1.0.0"}, Package: "registry.example.com/channel-a/provider-kubernetes"},
-						{Name: "provider-kubernetes", Versions: []string{"v1.0.0"}, Package: "registry.example.com/channel-b/provider-kubernetes"},
-					},
-				},
-			},
-		}
-		comp, err := r.GetResolverFunc(pcDup)("provider-kubernetes", "v1.0.0")
-		assert.NoError(t, err)
-		assert.Equal(t, "registry.example.com/channel-a/provider-kubernetes:v1.0.0", comp.DockerRef)
-	})
 }
 
 func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 	tests := []struct {
 		name       string
+		store      *discovery.Store
 		pc         *v1alpha1.ProviderConfig
 		secretName string
 		want       bool
 	}{
 		{
-			name: "matches chart pull secret",
+			name: "matches discovered crossplane pull secret",
+			store: newCrossplaneStore(
+				map[string]v1beta1.ComponentVersion{"v1.0.0": {Version: "v1.0.0"}},
+				map[string]string{"v1.0.0": "chart-secret"},
+				nil,
+			),
 			pc: &v1alpha1.ProviderConfig{
 				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-						{
-							Version: "v1.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
-						},
-					},
 					Providers: v1alpha1.CrossplaneProviders{},
 				},
 			},
@@ -834,33 +821,14 @@ func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 			want:       true,
 		},
 		{
-			name: "matches image pull secret",
-			pc: &v1alpha1.ProviderConfig{
-				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-						{
-							Version: "v1.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
-						},
-					},
-					Providers: v1alpha1.CrossplaneProviders{},
-				},
-			},
-			secretName: "image-secret",
-			want:       true,
-		},
-		{
 			name: "matches provider image pull secret",
+			store: newCrossplaneStore(
+				map[string]v1beta1.ComponentVersion{"v1.0.0": {Version: "v1.0.0"}},
+				nil,
+				nil,
+			),
 			pc: &v1alpha1.ProviderConfig{
 				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-						{
-							Version: "v1.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
-						},
-					},
 					Providers: v1alpha1.CrossplaneProviders{
 						ImagePullSecrets: []commonapi.LocalObjectReference{
 							{Name: "provider-pull-secret"},
@@ -872,21 +840,17 @@ func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 			want:       true,
 		},
 		{
-			name: "matches secret in second version entry",
+			name: "matches discovered pull secret from a second version",
+			store: newCrossplaneStore(
+				map[string]v1beta1.ComponentVersion{
+					"v1.0.0": {Version: "v1.0.0"},
+					"v2.0.0": {Version: "v2.0.0"},
+				},
+				map[string]string{"v2.0.0": "v2-chart-secret"},
+				nil,
+			),
 			pc: &v1alpha1.ProviderConfig{
 				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-						{
-							Version: "v1.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
-						},
-						{
-							Version: "v2.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/2", SecretRef: commonapi.LocalObjectReference{Name: "v2-chart-secret"}},
-							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/2"},
-						},
-					},
 					Providers: v1alpha1.CrossplaneProviders{},
 				},
 			},
@@ -895,15 +859,13 @@ func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 		},
 		{
 			name: "does not match unrelated secret",
+			store: newCrossplaneStore(
+				map[string]v1beta1.ComponentVersion{"v1.0.0": {Version: "v1.0.0"}},
+				map[string]string{"v1.0.0": "chart-secret"},
+				nil,
+			),
 			pc: &v1alpha1.ProviderConfig{
 				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-						{
-							Version: "v1.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "image-secret"}},
-						},
-					},
 					Providers: v1alpha1.CrossplaneProviders{
 						ImagePullSecrets: []commonapi.LocalObjectReference{
 							{Name: "provider-pull-secret"},
@@ -915,69 +877,35 @@ func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 			want:       false,
 		},
 		{
-			name: "empty provider config - no secrets referenced",
+			name:  "empty store and provider config - no secrets referenced",
+			store: discovery.NewStore(),
 			pc: &v1alpha1.ProviderConfig{
 				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{},
-					Providers:          v1alpha1.CrossplaneProviders{},
+					Providers: v1alpha1.CrossplaneProviders{},
 				},
 			},
 			secretName: "any-secret",
 			want:       false,
 		},
 		{
-			name: "empty secret refs - no match",
+			name: "no discovered pull secrets - no match",
+			store: newCrossplaneStore(
+				map[string]v1beta1.ComponentVersion{"v1.0.0": {Version: "v1.0.0"}},
+				nil,
+				nil,
+			),
 			pc: &v1alpha1.ProviderConfig{
 				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-						{
-							Version: "v1.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
-						},
-					},
 					Providers: v1alpha1.CrossplaneProviders{},
 				},
 			},
 			secretName: "some-secret",
 			want:       false,
 		},
-		{
-			name: "nil image - only chart secret checked",
-			pc: &v1alpha1.ProviderConfig{
-				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-						{
-							Version: "v1.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-						},
-					},
-					Providers: v1alpha1.CrossplaneProviders{},
-				},
-			},
-			secretName: "chart-secret",
-			want:       true,
-		},
-		{
-			name: "nil image - image secret does not match",
-			pc: &v1alpha1.ProviderConfig{
-				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-						{
-							Version: "v1.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-						},
-					},
-					Providers: v1alpha1.CrossplaneProviders{},
-				},
-			},
-			secretName: "image-secret",
-			want:       false,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isSecretReferencedInProviderConfig(tt.pc, tt.secretName)
+			got := isSecretReferencedInProviderConfig(tt.store, tt.pc, tt.secretName)
 			if got != tt.want {
 				t.Errorf("isSecretReferencedInProviderConfig() = %v, want %v", got, tt.want)
 			}
@@ -988,6 +916,7 @@ func Test_isSecretReferencedInProviderConfig(t *testing.T) {
 func Test_mapSecretToRequests(t *testing.T) {
 	tests := []struct {
 		name                string
+		store               *discovery.Store
 		secret              *corev1.Secret
 		providerConfig      *v1alpha1.ProviderConfig
 		crossplaneInstances []client.Object
@@ -995,6 +924,11 @@ func Test_mapSecretToRequests(t *testing.T) {
 	}{
 		{
 			name: "referenced secret triggers reconciliation for all Crossplane instances",
+			store: newCrossplaneStore(
+				map[string]v1beta1.ComponentVersion{"v1.0.0": {Version: "v1.0.0"}},
+				map[string]string{"v1.0.0": "chart-secret"},
+				nil,
+			),
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "chart-secret",
@@ -1006,13 +940,6 @@ func Test_mapSecretToRequests(t *testing.T) {
 					Name: TestProviderName,
 				},
 				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-						{
-							Version: "v1.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
-						},
-					},
 					Providers: v1alpha1.CrossplaneProviders{},
 				},
 			},
@@ -1031,6 +958,11 @@ func Test_mapSecretToRequests(t *testing.T) {
 		},
 		{
 			name: "unreferenced secret returns no requests",
+			store: newCrossplaneStore(
+				map[string]v1beta1.ComponentVersion{"v1.0.0": {Version: "v1.0.0"}},
+				map[string]string{"v1.0.0": "chart-secret"},
+				nil,
+			),
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "unrelated-secret",
@@ -1042,13 +974,6 @@ func Test_mapSecretToRequests(t *testing.T) {
 					Name: TestProviderName,
 				},
 				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-						{
-							Version: "v1.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
-						},
-					},
 					Providers: v1alpha1.CrossplaneProviders{},
 				},
 			},
@@ -1061,6 +986,11 @@ func Test_mapSecretToRequests(t *testing.T) {
 		},
 		{
 			name: "referenced secret with no Crossplane instances returns empty",
+			store: newCrossplaneStore(
+				map[string]v1beta1.ComponentVersion{"v1.0.0": {Version: "v1.0.0"}},
+				map[string]string{"v1.0.0": "chart-secret"},
+				nil,
+			),
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "chart-secret",
@@ -1072,13 +1002,6 @@ func Test_mapSecretToRequests(t *testing.T) {
 					Name: TestProviderName,
 				},
 				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-						{
-							Version: "v1.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1", SecretRef: commonapi.LocalObjectReference{Name: "chart-secret"}},
-							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
-						},
-					},
 					Providers: v1alpha1.CrossplaneProviders{},
 				},
 			},
@@ -1086,7 +1009,8 @@ func Test_mapSecretToRequests(t *testing.T) {
 			wantRequests:        []ctrl.Request{},
 		},
 		{
-			name: "provider image pull secret triggers reconciliation",
+			name:  "provider image pull secret triggers reconciliation",
+			store: discovery.NewStore(),
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "provider-pull-secret",
@@ -1098,13 +1022,6 @@ func Test_mapSecretToRequests(t *testing.T) {
 					Name: TestProviderName,
 				},
 				Spec: v1alpha1.ProviderConfigSpec{
-					CrossplaneVersions: []v1alpha1.CrossplaneVersion{
-						{
-							Version: "v1.0.0",
-							Chart:   v1alpha1.ChartSpec{URL: "https://charts.example.com/1"},
-							Image:   &v1alpha1.ImageSpec{URL: "https://images.example.com/1"},
-						},
-					},
 					Providers: v1alpha1.CrossplaneProviders{
 						ImagePullSecrets: []commonapi.LocalObjectReference{
 							{Name: "provider-pull-secret"},
@@ -1142,6 +1059,7 @@ func Test_mapSecretToRequests(t *testing.T) {
 				PlatformCluster:   clusters.NewTestClusterFromClient("platform", platformClient),
 				OnboardingCluster: clusters.NewTestClusterFromClient("onboarding", onboardingClient),
 				ProviderName:      TestProviderName,
+				VersionStore:      tt.store,
 			}
 
 			got := r.mapSecretToRequests(context.Background(), tt.secret)
@@ -1178,6 +1096,7 @@ func Test_mapSecretToRequests_providerConfigNotFound(t *testing.T) {
 		PlatformCluster:   clusters.NewTestClusterFromClient("platform", platformClient),
 		OnboardingCluster: clusters.NewTestClusterFromClient("onboarding", onboardingClient),
 		ProviderName:      TestProviderName,
+		VersionStore:      discovery.NewStore(),
 	}
 
 	secret := &corev1.Secret{

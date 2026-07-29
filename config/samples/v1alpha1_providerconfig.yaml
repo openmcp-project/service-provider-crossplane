@@ -3,33 +3,57 @@ kind: ProviderConfig
 metadata:
   name: default
 spec:
-  versions: # mapping of
-    - version: v2.0.2
-      chart:
-        url: "ghcr.io/openmcp-project/openmcp/charts/crossplane:2.0.2"
-        secretRef:
-          name: ghcr
-      image:
-        url: "ghcr.io/openmcp-project/openmcp/images/crossplane:2.0.2"
-        secretRef:
-          name: xyz
-    - version: v1.20.0
-      chart:
-        url: "ghcr.io/openmcp-project/openmcp/charts/crossplane:1.20.0"
-        secretRef:
-          name: ghcr
-      image:
-        url: "ghcr.io/openmcp-project/openmcp/images/crossplane:1.20.0"
-        secretRef:
-          name: xyz
-
+  # Name of the discovery source (ConfigMap) that publishes the available Crossplane versions.
+  crossplaneDiscoveryName: crossplane-discovery
+  # Selects the discovery sources (ConfigMaps) that publish the available provider versions.
+  providerDiscoverySelector:
+    matchLabels:
+      crossplane.services.open-control-plane.io/discovery: provider
   providers:
-    availableProviders:
-      - name: provider-kubernetes
-        package: xpkg.upbound.io/upbound/provider-kubernetes
-        versions:
-          - v0.16.0
-          - v0.15.0
     imagePullSecretRefs:
       - name: secretforprivateproviders
       - name: xyz
+---
+# Simulated discovery source for Crossplane. In production this will be a Discovery resource
+# owned by the ocm controllers; for now it is a ConfigMap read by the service provider.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: crossplane-discovery
+spec: {}
+data:
+  components: |
+    - name: github.com/openmcp-project/releasechannel/crossplane
+      version: v2.0.8
+      resources:
+        - name: crossplane
+          type: helmChart
+          version: v2.0.8
+          access:
+            type: ociArtifact
+            imageReference: ghcr.io/openmcp-project/openmcp/charts/crossplane:2.0.8@sha256:5fd4b4a82463c3433ccdd4d3e7ea54e1621f0cb7b928559ce62b52e2b4706b2b
+        - name: image-crossplane
+          type: ociImage
+          version: v2.0.8
+          access:
+            type: ociArtifact
+            imageReference: ghcr.io/openmcp-project/openmcp/images/crossplane:v2.0.8@sha256:9ada05a4a8a6e0886ca5c4aa758a972ff3bae55a07d3ec54ccbe79067f56c214
+---
+# Simulated discovery source for a provider. Selected via providerDiscoverySelector labels.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: provider-kubernetes-discovery
+  labels:
+    crossplane.services.open-control-plane.io/discovery: provider
+data:
+  components: |
+    - name: github.com/openmcp-project/releasechannel/provider-kubernetes
+      version: v1.2.1
+      resources:
+        - name: provider-kubernetes
+          type: ociImage
+          version: v1.2.1
+          access:
+            type: ociArtifact
+            imageReference: xpkg.upbound.io/upbound/provider-kubernetes:v1.2.1
