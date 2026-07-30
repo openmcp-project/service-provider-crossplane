@@ -28,6 +28,11 @@ require (
 	sigs.k8s.io/e2e-framework v0.7.0
 )
 
+// The repository renamed from ThalesIgnite (and later ThalesGroup) to eclipse-keypont
+// because the project was donated to the Eclipse Foundation.
+// Required by ocm.software/ocm (transitive via control-plane-operator) through sigstore/cosign.
+replace github.com/ThalesIgnite/crypto11 => github.com/eclipse-keypont/crypto11 v1.6.8
+
 require (
 	al.essio.dev/pkg/shellescape v1.6.0 // indirect
 	cel.dev/expr v0.25.2 // indirect
@@ -376,8 +381,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
-
-// Renamed from ThalesIgnite to ThalesGroup; old versions still declare the old path,
-// causing a path mismatch. Required by ocm.software/ocm (transitive via control-plane-operator)
-// through sigstore/cosign.
-replace github.com/ThalesIgnite/crypto11 => github.com/ThalesGroup/crypto11 v1.6.8
