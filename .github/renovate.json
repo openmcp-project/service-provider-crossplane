@@ -1,25 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "github>openmcp-project/.github:renovate-config",
-    ":enableVulnerabilityAlerts"
-  ],
-  "git-submodules": {
-    "enabled": true
-  },
-  "packageRules": [
-    {
-      "description": "Group openmcp-project Go components",
-      "matchManagers": [
-        "gomod"
-      ],
-      "matchPackageNames": [
-        "github.com/openmcp-project/*",
-        "openmcp-project/*"
-      ],
-      "groupName": "openmcp-project Go dependencies",
-      "minimumReleaseAge": "0 days",
-      "automerge": true
-    }
+    "github>openmcp-project/.github:renovate-config"
   ]
 }
