@@ -16,7 +16,7 @@ require (
 	github.com/openmcp-project/openmcp-testing v1.2.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/text v0.40.0
+	golang.org/x/text v0.41.0
 	gotest.tools/v3 v3.5.2
 	k8s.io/api v0.36.3
 	k8s.io/apiextensions-apiserver v0.36.3
