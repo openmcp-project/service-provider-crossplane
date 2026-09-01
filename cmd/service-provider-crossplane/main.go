@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
+	"github.com/openmcp-project/controller-utils/pkg/fips"
 	"github.com/openmcp-project/controller-utils/pkg/logging"
 	"github.com/openmcp-project/openmcp-operator/lib/clusteraccess"
 	"github.com/openmcp-project/openmcp-operator/lib/utils"
@@ -60,6 +61,8 @@ var (
 )
 
 func main() {
+	fips.Verify(context.Background())
+
 	rootCmd := &cobra.Command{
 		Use:   "service-provider-crossplane",
 		Short: "Crossplane service provider",
