@@ -1,6 +1,6 @@
 module github.com/openmcp-project/service-provider-crossplane
 
-go 1.26.6
+go 1.27.0
 
 require (
 	github.com/crossplane/crossplane/apis/v2 v2.4.0
@@ -11,9 +11,9 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/openmcp-project/control-plane-operator v0.5.0
 	github.com/openmcp-project/controller-utils v0.33.0
-	github.com/openmcp-project/openmcp-operator/api v1.3.0
-	github.com/openmcp-project/openmcp-operator/lib v1.3.0
-	github.com/openmcp-project/openmcp-testing v1.3.0
+	github.com/openmcp-project/openmcp-operator/api v1.4.0
+	github.com/openmcp-project/openmcp-operator/lib v1.4.0
+	github.com/openmcp-project/openmcp-testing v1.3.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/text v0.41.0
