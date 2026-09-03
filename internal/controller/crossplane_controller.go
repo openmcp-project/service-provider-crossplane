@@ -127,8 +127,22 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		OldObject: oldXP,
 	}
 
+	skip, err := r.handleOperationAnnotation(ctx, xp)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if skip {
+		ctrlutils.GenerateCreateConditionFunc(&rr)(ConditionTypeReconciled, metav1.ConditionFalse, ReasonReconciliationIgnored, fmt.Sprintf("Reconciliation of %s/%s skipped due to ignore operation annotation", xp.Name, xp.Namespace))
+		rr.SmartRequeue = ctrlutils.SR_NO_REQUEUE
+		return r.updateStatus(ctx, rr)
+	}
+
 	r.doReconcile(ctx, req, &rr)
 
+	return r.updateStatus(ctx, rr)
+}
+
+func (r *CrossplaneReconciler) updateStatus(ctx context.Context, rr ctrlutils.ReconcileResult[*v1alpha1.Crossplane]) (ctrl.Result, error) {
 	return ctrlutils.NewOpenMCPStatusUpdaterBuilder[*v1alpha1.Crossplane]().
 		WithNestedStruct("Status").
 		WithConditionUpdater(false).
@@ -137,6 +151,24 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		WithSmartRequeue(r.RequeueStore, smartRequeueConditional).
 		Build().
 		UpdateStatus(ctx, r.OnboardingCluster.Client(), rr)
+}
+
+func (r *CrossplaneReconciler) handleOperationAnnotation(ctx context.Context, xp *v1alpha1.Crossplane) (bool, error) {
+	log := log.FromContext(ctx)
+
+	if ctrlutils.HasAnnotationWithValue(xp, openmcpconsts.OperationAnnotation, openmcpconsts.OperationAnnotationValueIgnore) {
+		log.Info("Ignoring resource due to ignore operation annotation")
+		return true, nil
+	}
+
+	if ctrlutils.HasAnnotationWithValue(xp, openmcpconsts.OperationAnnotation, openmcpconsts.OperationAnnotationValueReconcile) {
+		log.Info("Reconciliation requested via operation annotation. Removing annotation and proceeding with reconciliation")
+		if err := ctrlutils.EnsureAnnotation(ctx, r.OnboardingCluster.Client(), xp, openmcpconsts.OperationAnnotation, openmcpconsts.OperationAnnotationValueReconcile, true, ctrlutils.DELETE); err != nil {
+			return false, fmt.Errorf("failed to remove reconcile operation annotation: %w", err)
+		}
+	}
+
+	return false, nil
 }
 
 func inDeletion(obj client.Object) bool {
