@@ -25,6 +25,7 @@ const (
 	ReasonDeletionInProgress            = "DeletionInProgress"
 	ReasonDeletionComponentCleanupError = "DeletionComponentCleanupError"
 	ReasonFinalizerFailed               = "FinalizerFailed"
+	ReasonReconciliationIgnored         = "ReconciliationIgnored"
 )
 
 func computePhase(obj *v1alpha1.Crossplane, _ ctrlutils.ReconcileResult[*v1alpha1.Crossplane]) (string, error) {
