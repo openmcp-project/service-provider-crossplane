@@ -23,6 +23,8 @@ import (
 	openmcpconditions "github.com/openmcp-project/openmcp-testing/pkg/conditions"
 	"github.com/openmcp-project/openmcp-testing/pkg/providers"
 	"github.com/openmcp-project/openmcp-testing/pkg/resources"
+
+	openmcpconsts "github.com/openmcp-project/openmcp-operator/api/constants"
 )
 
 const (
@@ -510,6 +512,116 @@ func TestInvalidProviderVersionRecovery(t *testing.T) {
 		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(timeout)))
 
 	testenv.Test(t, recoveryTest.Feature())
+}
+
+func TestIgnoreOperationAnnotation(t *testing.T) {
+	validVersion := "1.20.5"
+
+	ignoreTest := features.New("ignore operation annotation test").
+		Setup(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			if _, err := resources.CreateObjectsFromDir(ctx, c, "platform"); err != nil {
+				t.Errorf("failed to create platform cluster objects: %v", err)
+			}
+			return ctx
+		}).
+		Setup(providers.CreateMCP(mcpName)).
+		Assess("create crossplane with ignore annotation and verify reconciliation is skipped",
+			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+				onboardingConfig, err := clusterutils.OnboardingConfig()
+				if err != nil {
+					t.Error(err)
+					return ctx
+				}
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   v1alpha1.GroupVersion.Group,
+					Version: v1alpha1.GroupVersion.Version,
+					Kind:    "Crossplane",
+				})
+				obj.SetName(mcpName)
+				obj.SetNamespace("default")
+				obj.SetAnnotations(map[string]string{
+					openmcpconsts.OperationAnnotation: openmcpconsts.OperationAnnotationValueIgnore,
+				})
+				_ = unstructured.SetNestedField(obj.Object, validVersion, "spec", "version")
+
+				if err := onboardingConfig.Client().Resources().Create(ctx, obj); err != nil {
+					t.Errorf("failed to create Crossplane resource: %v", err)
+					return ctx
+				}
+
+				// The reconciler must stand down and surface the ignore reason instead of reconciling.
+				if err := wait.For(
+					conditionWithMessageContains(obj, onboardingConfig, "Reconciled", corev1.ConditionFalse, "ignore operation annotation"),
+					wait.WithTimeout(3*time.Minute),
+				); err != nil {
+					t.Errorf("expected Reconciled=False with ignore reason while ignore annotation is set: %v", err)
+				}
+				return ctx
+			},
+		).
+		Assess("remove ignore annotation and verify reconciliation resumes",
+			func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+				onboardingConfig, err := clusterutils.OnboardingConfig()
+				if err != nil {
+					t.Error(err)
+					return ctx
+				}
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(schema.GroupVersionKind{
+					Group:   v1alpha1.GroupVersion.Group,
+					Version: v1alpha1.GroupVersion.Version,
+					Kind:    "Crossplane",
+				})
+				obj.SetName(mcpName)
+				obj.SetNamespace("default")
+
+				if err := onboardingConfig.Client().Resources().Get(ctx, obj.GetName(), obj.GetNamespace(), obj); err != nil {
+					t.Errorf("failed to get Crossplane resource: %v", err)
+					return ctx
+				}
+				annotations := obj.GetAnnotations()
+				delete(annotations, openmcpconsts.OperationAnnotation)
+				obj.SetAnnotations(annotations)
+				if err := onboardingConfig.Client().Resources().Update(ctx, obj); err != nil {
+					t.Errorf("failed to update Crossplane resource: %v", err)
+					return ctx
+				}
+
+				if err := wait.For(
+					openmcpconditions.Match(obj, onboardingConfig, "Reconciled", corev1.ConditionTrue),
+					wait.WithTimeout(timeout),
+				); err != nil {
+					t.Errorf("expected Reconciled=True after removing ignore annotation: %v", err)
+				}
+				return ctx
+			},
+		).
+		Assess("ManagedControlPlane: crossplane deployment is available",
+			crossplaneDeploymentReady(mcpName),
+		).
+		Teardown(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			onboardingConfig, err := clusterutils.OnboardingConfig()
+			if err != nil {
+				t.Error(err)
+				return ctx
+			}
+			obj := &unstructured.Unstructured{}
+			obj.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   v1alpha1.GroupVersion.Group,
+				Version: v1alpha1.GroupVersion.Version,
+				Kind:    "Crossplane",
+			})
+			obj.SetName(mcpName)
+			obj.SetNamespace("default")
+			if err := resources.DeleteObject(ctx, onboardingConfig, obj, wait.WithTimeout(timeout)); err != nil {
+				t.Errorf("failed to delete Crossplane resource: %v", err)
+			}
+			return ctx
+		}).
+		Teardown(providers.DeleteMCP(mcpName, wait.WithTimeout(timeout)))
+
+	testenv.Test(t, ignoreTest.Feature())
 }
 
 func conditionWithMessageContains(obj *unstructured.Unstructured, cfg *envconf.Config, conditionType string, conditionStatus corev1.ConditionStatus, substring string) kubewait.ConditionWithContextFunc {

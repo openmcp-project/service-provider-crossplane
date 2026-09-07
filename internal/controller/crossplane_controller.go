@@ -132,7 +132,7 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 	if skip {
-		ctrlutils.GenerateCreateConditionFunc(&rr)(ConditionTypeReconciled, metav1.ConditionFalse, ReasonReconciliationIgnored, fmt.Sprintf("Reconciliation of %s/%s skipped due to ignore operation annotation", xp.Name, xp.Namespace))
+		ctrlutils.GenerateCreateConditionFunc(&rr)(ConditionTypeReconciled, metav1.ConditionFalse, ReasonReconciliationIgnored, fmt.Sprintf("Reconciliation of %s/%s skipped due to ignore operation annotation", xp.Namespace, xp.Name))
 		rr.SmartRequeue = ctrlutils.SR_NO_REQUEUE
 		return r.updateStatus(ctx, rr)
 	}
