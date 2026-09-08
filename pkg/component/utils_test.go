@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	crossplanev1 "github.com/crossplane/crossplane/apis/v2/pkg/v1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
@@ -287,6 +288,32 @@ func canBuildAndReconcile(expectedErr error) objectValidationFunc {
 
 		err = c.ReconcileObject(ctx, obj)
 		assert.Equal(t, expectedErr, err)
+	}
+}
+
+func hasRuntimeConfigRef(name string) objectValidationFunc {
+	return func(t *testing.T, ctx context.Context, c object.ObjectComponent) {
+		obj, _, err := c.BuildObjectToReconcile(ctx)
+		if !assert.NoError(t, err) {
+			return
+		}
+		obj.SetName(name)
+		if !assert.NoError(t, c.ReconcileObject(ctx, obj)) {
+			return
+		}
+		var ref crossplanev1.RuntimeConfigReference
+		switch o := obj.(type) {
+		case *crossplanev1.Provider:
+			ref = *o.Spec.RuntimeConfigReference
+		case *crossplanev1.Function:
+			ref = *o.Spec.RuntimeConfigReference
+		default:
+			t.Errorf("object type %T has no RuntimeConfigReference", obj)
+			return
+		}
+		if assert.NotNil(t, ref) {
+			assert.Equal(t, name, ref.Name)
+		}
 	}
 }
 
