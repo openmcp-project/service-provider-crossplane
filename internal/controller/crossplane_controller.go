@@ -669,9 +669,7 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 				},
 			}
 			configureDRCForCustomCA(drc, pc)
-			comps = append(comps, drc)
-
-			comps = append(comps, &component.CrossplaneProvider{
+			comps = append(comps, drc, &component.CrossplaneProvider{
 				Config:      provider,
 				Enabled:     xpComp.IsEnabled(),
 				PullSecrets: pullSecrets,
@@ -698,8 +696,7 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 				},
 			}
 			configureDRCForCustomCA(drc, pc)
-			comps = append(comps, drc)
-			comps = append(comps, &component.CrossplaneFunction{
+			comps = append(comps, drc, &component.CrossplaneFunction{
 				Config:      function,
 				Enabled:     xpComp.IsEnabled(),
 				PullSecrets: pullSecrets,
