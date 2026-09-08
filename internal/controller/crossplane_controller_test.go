@@ -27,12 +27,15 @@ import (
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
 	"github.com/openmcp-project/control-plane-operator/pkg/utils/rcontext"
 	"github.com/openmcp-project/controller-utils/pkg/clusters"
+	"github.com/openmcp-project/controller-utils/pkg/controller/smartrequeue"
 	errutils "github.com/openmcp-project/controller-utils/pkg/errors"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
+	openmcpconsts "github.com/openmcp-project/openmcp-operator/api/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1542,4 +1545,111 @@ func Test_prefixSecretName(t *testing.T) {
 			assert.LessOrEqual(t, len(got), 63)
 		})
 	}
+}
+
+func Test_handleOperationAnnotation(t *testing.T) {
+	tests := []struct {
+		name            string
+		annotations     map[string]string
+		wantSkip        bool
+		wantAnnotations map[string]string
+	}{
+		{
+			name:            "no operation annotation continues reconciliation",
+			annotations:     nil,
+			wantSkip:        false,
+			wantAnnotations: nil,
+		},
+		{
+			name:            "ignore annotation skips reconciliation and is kept",
+			annotations:     map[string]string{openmcpconsts.OperationAnnotation: openmcpconsts.OperationAnnotationValueIgnore},
+			wantSkip:        true,
+			wantAnnotations: map[string]string{openmcpconsts.OperationAnnotation: openmcpconsts.OperationAnnotationValueIgnore},
+		},
+		{
+			name:            "reconcile annotation is removed and reconciliation continues",
+			annotations:     map[string]string{openmcpconsts.OperationAnnotation: openmcpconsts.OperationAnnotationValueReconcile},
+			wantSkip:        false,
+			wantAnnotations: map[string]string{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			xp := &v1alpha1.Crossplane{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "crossplane",
+					Namespace:   "crossplane-ns",
+					Annotations: tt.annotations,
+				},
+			}
+
+			onboardingClient := fake.NewClientBuilder().
+				WithScheme(scheme.Onboarding).
+				WithObjects(xp).
+				Build()
+
+			r := &CrossplaneReconciler{
+				OnboardingCluster: clusters.NewTestClusterFromClient("onboarding", onboardingClient),
+			}
+
+			skip, err := r.handleOperationAnnotation(context.Background(), xp)
+			if err != nil {
+				t.Fatalf("handleOperationAnnotation() returned unexpected error: %v", err)
+			}
+			if skip != tt.wantSkip {
+				t.Errorf("handleOperationAnnotation() skip = %v, want %v", skip, tt.wantSkip)
+			}
+
+			// Verify the in-cluster object reflects the expected annotations.
+			got := &v1alpha1.Crossplane{}
+			if err := onboardingClient.Get(context.Background(), client.ObjectKeyFromObject(xp), got); err != nil {
+				t.Fatalf("failed to get Crossplane instance: %v", err)
+			}
+			if len(got.GetAnnotations()) != len(tt.wantAnnotations) {
+				t.Fatalf("annotations = %v, want %v", got.GetAnnotations(), tt.wantAnnotations)
+			}
+			for k, v := range tt.wantAnnotations {
+				if got.GetAnnotations()[k] != v {
+					t.Errorf("annotation %q = %q, want %q", k, got.GetAnnotations()[k], v)
+				}
+			}
+		})
+	}
+}
+
+func Test_Reconcile_ignoreAnnotationSurfacesInStatus(t *testing.T) {
+	xp := &v1alpha1.Crossplane{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "crossplane",
+			Namespace:   "crossplane-ns",
+			Annotations: map[string]string{openmcpconsts.OperationAnnotation: openmcpconsts.OperationAnnotationValueIgnore},
+		},
+	}
+
+	onboardingClient := fake.NewClientBuilder().
+		WithScheme(scheme.Onboarding).
+		WithObjects(xp).
+		WithStatusSubresource(&v1alpha1.Crossplane{}).
+		Build()
+
+	r := &CrossplaneReconciler{
+		OnboardingCluster: clusters.NewTestClusterFromClient("onboarding", onboardingClient),
+		RequeueStore:      smartrequeue.NewStore(1, 1, 1),
+	}
+
+	res, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(xp)})
+	require.NoError(t, err)
+	assert.Zero(t, res.RequeueAfter)
+
+	got := &v1alpha1.Crossplane{}
+	require.NoError(t, onboardingClient.Get(context.Background(), client.ObjectKeyFromObject(xp), got))
+
+	// The ignore annotation must be preserved.
+	assert.Equal(t, openmcpconsts.OperationAnnotationValueIgnore, got.GetAnnotations()[openmcpconsts.OperationAnnotation])
+
+	// The ignore must be surfaced as a Reconciled=False condition with the dedicated reason.
+	cond := apimeta.FindStatusCondition(got.Status.Conditions, ConditionTypeReconciled)
+	require.NotNil(t, cond, "expected a %q condition to be set", ConditionTypeReconciled)
+	assert.Equal(t, metav1.ConditionFalse, cond.Status)
+	assert.Equal(t, ReasonReconciliationIgnored, cond.Reason)
 }
