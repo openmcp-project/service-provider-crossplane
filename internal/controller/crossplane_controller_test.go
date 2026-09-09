@@ -242,7 +242,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Name:    "provider-1",
+					Name:    p1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
 							Metadata: &crossplanev1beta1.ObjectMeta{
@@ -253,7 +253,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Name:    "provider-2",
+					Name:    p2,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
 							Metadata: &crossplanev1beta1.ObjectMeta{
@@ -342,7 +342,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Name:    "provider-1",
+					Name:    p1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
 							Metadata: &crossplanev1beta1.ObjectMeta{
@@ -422,7 +422,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Name:    "provider-1",
+					Name:    p1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
 							Metadata: &crossplanev1beta1.ObjectMeta{
@@ -514,7 +514,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: false,
-					Name:    "provider-1",
+					Name:    p1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
 							Metadata: &crossplanev1beta1.ObjectMeta{
@@ -582,7 +582,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Name:    "provider-1",
+					Name:    p1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						DeploymentTemplate: &crossplanev1beta1.DeploymentTemplate{
 							Spec: &appsv1.DeploymentSpec{
@@ -695,7 +695,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Name:    "function-1",
+					Name:    f1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
 							Metadata: &crossplanev1beta1.ObjectMeta{
@@ -762,7 +762,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Name:    "provider-1",
+					Name:    p1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
 							Metadata: &crossplanev1beta1.ObjectMeta{
@@ -773,7 +773,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Name:    "function-1",
+					Name:    f1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
 							Metadata: &crossplanev1beta1.ObjectMeta{
@@ -860,7 +860,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Name:    "function-1",
+					Name:    f1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
 							Metadata: &crossplanev1beta1.ObjectMeta{
@@ -927,7 +927,7 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
-					Name:    "function-1",
+					Name:    f1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
 							Metadata: &crossplanev1beta1.ObjectMeta{
