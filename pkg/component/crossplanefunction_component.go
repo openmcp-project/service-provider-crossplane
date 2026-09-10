@@ -54,6 +54,7 @@ func (c *CrossplaneFunction) ReconcileObject(ctx context.Context, obj client.Obj
 	objFunction.Spec.Package = comp.DockerRef
 	objFunction.Spec.PackagePullPolicy = ptr.To(corev1.PullIfNotPresent)
 	objFunction.Spec.PackagePullSecrets = c.PullSecrets
+	objFunction.Spec.RuntimeConfigReference = &crossplanev1.RuntimeConfigReference{Name: objFunction.Name}
 	return nil
 }
 
@@ -123,7 +124,7 @@ func (c *CrossplaneFunction) GetName() string {
 
 // GetDependencies implements Component.
 func (c *CrossplaneFunction) GetDependencies() []juggler.Component {
-	return []juggler.Component{&Crossplane{}}
+	return []juggler.Component{&Crossplane{}, &DeploymentRuntimeConfig{}}
 }
 
 // IsEnabled implements Component.

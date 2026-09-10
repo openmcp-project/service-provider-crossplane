@@ -182,7 +182,7 @@ func Test_CrossplaneProvider(t *testing.T) {
 				hasName("ProviderKubernetes"),
 				isEnabled(true),
 				isAllowed(true),
-				hasDependencies(1),
+				hasDependencies(2),
 				isTargetComponent(
 					hasNamespace("crossplane-system"),
 				),
@@ -197,6 +197,7 @@ func Test_CrossplaneProvider(t *testing.T) {
 						Message: "Healthy: Healthy",
 					}),
 					canBuildAndReconcile(nil),
+					hasRuntimeConfigRef("provider-kubernetes"),
 					implementsOrphanedObjectsDetector(
 						listTypeIs(&crossplanev1.ProviderList{}),
 						hasFilterCriteria(2),
