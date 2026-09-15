@@ -1,13 +1,13 @@
 module github.com/openmcp-project/service-provider-crossplane
 
-go 1.27.0
+go 1.27.1
 
 require (
 	github.com/crossplane/crossplane/apis/v2 v2.4.0
-	github.com/fluxcd/helm-controller/api v1.6.3
-	github.com/fluxcd/kustomize-controller/api v1.9.4
+	github.com/fluxcd/helm-controller/api v1.6.4
+	github.com/fluxcd/kustomize-controller/api v1.9.5
 	github.com/fluxcd/pkg/apis/meta v1.31.0
-	github.com/fluxcd/source-controller/api v1.9.4
+	github.com/fluxcd/source-controller/api v1.9.5
 	github.com/go-logr/logr v1.4.4
 	github.com/openmcp-project/control-plane-operator v0.5.0
 	github.com/openmcp-project/controller-utils v0.33.0
@@ -16,7 +16,7 @@ require (
 	github.com/openmcp-project/openmcp-testing v1.3.1
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
-	golang.org/x/text v0.41.0
+	golang.org/x/text v0.42.0
 	gotest.tools/v3 v3.5.2
 	k8s.io/api v0.37.0
 	k8s.io/apiextensions-apiserver v0.37.0
@@ -24,7 +24,7 @@ require (
 	k8s.io/client-go v0.37.0
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
-	sigs.k8s.io/controller-runtime v0.24.1
+	sigs.k8s.io/controller-runtime v0.25.0
 	sigs.k8s.io/e2e-framework v0.7.0
 )
 
@@ -339,10 +339,10 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/exp v0.0.0-20260727155853-b88d891fe743 // indirect
-	golang.org/x/mod v0.38.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
