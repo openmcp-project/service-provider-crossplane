@@ -13,7 +13,7 @@ require (
 	github.com/openmcp-project/controller-utils v0.33.0
 	github.com/openmcp-project/openmcp-operator/api v1.4.0
 	github.com/openmcp-project/openmcp-operator/lib v1.4.0
-	github.com/openmcp-project/openmcp-testing v1.3.1
+	github.com/openmcp-project/openmcp-testing v1.4.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/text v0.42.0
@@ -135,10 +135,10 @@ require (
 	github.com/extism/go-sdk v1.7.1 // indirect
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/fluxcd/flux2/v2 v2.9.4 // indirect
+	github.com/fluxcd/flux2/v2 v2.9.5 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.20.0 // indirect
-	github.com/fluxcd/pkg/kustomize v1.35.4 // indirect
+	github.com/fluxcd/pkg/kustomize v1.35.6 // indirect
 	github.com/fluxcd/pkg/tar v1.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fvbommel/sortorder v1.1.0 // indirect
@@ -361,7 +361,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	helm.sh/helm/v4 v4.2.2 // indirect
 	k8s.io/apiserver v0.37.0 // indirect
-	k8s.io/cli-runtime v0.36.2 // indirect
+	k8s.io/cli-runtime v0.36.4 // indirect
 	k8s.io/component-base v0.37.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
 	k8s.io/streaming v0.37.0 // indirect
@@ -369,7 +369,7 @@ require (
 	oras.land/oras-go/v2 v2.6.2 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.36.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
-	sigs.k8s.io/kind v0.32.0 // indirect
+	sigs.k8s.io/kind v0.33.0 // indirect
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.1 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
