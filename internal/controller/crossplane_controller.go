@@ -127,8 +127,22 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		OldObject: oldXP,
 	}
 
+	skip, err := r.handleOperationAnnotation(ctx, xp)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if skip {
+		ctrlutils.GenerateCreateConditionFunc(&rr)(ConditionTypeReconciled, metav1.ConditionFalse, ReasonReconciliationIgnored, fmt.Sprintf("Reconciliation of %s/%s skipped due to ignore operation annotation", xp.Namespace, xp.Name))
+		rr.SmartRequeue = ctrlutils.SR_NO_REQUEUE
+		return r.updateStatus(ctx, rr)
+	}
+
 	r.doReconcile(ctx, req, &rr)
 
+	return r.updateStatus(ctx, rr)
+}
+
+func (r *CrossplaneReconciler) updateStatus(ctx context.Context, rr ctrlutils.ReconcileResult[*v1alpha1.Crossplane]) (ctrl.Result, error) {
 	return ctrlutils.NewOpenMCPStatusUpdaterBuilder[*v1alpha1.Crossplane]().
 		WithNestedStruct("Status").
 		WithConditionUpdater(false).
@@ -137,6 +151,24 @@ func (r *CrossplaneReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		WithSmartRequeue(r.RequeueStore, smartRequeueConditional).
 		Build().
 		UpdateStatus(ctx, r.OnboardingCluster.Client(), rr)
+}
+
+func (r *CrossplaneReconciler) handleOperationAnnotation(ctx context.Context, xp *v1alpha1.Crossplane) (bool, error) {
+	log := log.FromContext(ctx)
+
+	if ctrlutils.HasAnnotationWithValue(xp, openmcpconsts.OperationAnnotation, openmcpconsts.OperationAnnotationValueIgnore) {
+		log.Info("Ignoring resource due to ignore operation annotation")
+		return true, nil
+	}
+
+	if ctrlutils.HasAnnotationWithValue(xp, openmcpconsts.OperationAnnotation, openmcpconsts.OperationAnnotationValueReconcile) {
+		log.Info("Reconciliation requested via operation annotation. Removing annotation and proceeding with reconciliation")
+		if err := ctrlutils.EnsureAnnotation(ctx, r.OnboardingCluster.Client(), xp, openmcpconsts.OperationAnnotation, openmcpconsts.OperationAnnotationValueReconcile, true, ctrlutils.DELETE); err != nil {
+			return false, fmt.Errorf("failed to remove reconcile operation annotation: %w", err)
+		}
+	}
+
+	return false, nil
 }
 
 func inDeletion(obj client.Object) bool {
@@ -613,6 +645,11 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 	}
 	comps = append(comps, secretComps...)
 
+	cm := createCustomCAConfigMap(client, podNs, pc, xpComp.IsEnabled())
+	if cm != nil {
+		comps = append(comps, cm)
+	}
+
 	if xp.Spec.Providers != nil {
 		if len(pc.Spec.Providers.AvailableProviders) == 0 {
 			return nil, errors.New("providers are specified in Crossplane instance but no available providers configured in ProviderConfig")
@@ -620,7 +657,19 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 
 		pullSecrets := convertImagePullSecrets(pc.Spec.Providers.ImagePullSecrets)
 		for _, provider := range xp.Spec.Providers {
-			comps = append(comps, &component.CrossplaneProvider{
+			drc := &component.DeploymentRuntimeConfig{
+				Enabled: xpComp.IsEnabled(),
+				Name:    provider.Name,
+				Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
+					ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
+						Metadata: &crossplanev1beta1.ObjectMeta{
+							Name: &provider.Name,
+						},
+					},
+				},
+			}
+			configureDRCForCustomCA(drc, pc)
+			comps = append(comps, drc, &component.CrossplaneProvider{
 				Config:      provider,
 				Enabled:     xpComp.IsEnabled(),
 				PullSecrets: pullSecrets,
@@ -635,25 +684,25 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 
 		pullSecrets := convertImagePullSecrets(functionImagePullSecrets(pc))
 		for _, function := range xp.Spec.Functions {
-			comps = append(comps, &component.CrossplaneFunction{
+			drc := &component.DeploymentRuntimeConfig{
+				Enabled: xpComp.IsEnabled(),
+				Name:    function.Name,
+				Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
+					ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
+						Metadata: &crossplanev1beta1.ObjectMeta{
+							Name: &function.Name,
+						},
+					},
+				},
+			}
+			configureDRCForCustomCA(drc, pc)
+			comps = append(comps, drc, &component.CrossplaneFunction{
 				Config:      function,
 				Enabled:     xpComp.IsEnabled(),
 				PullSecrets: pullSecrets,
 			})
 		}
 	}
-
-	// DeploymentRuntimeConfig "default" needs to exist even if config for custom CA is removed later.
-	drc := &component.DeploymentRuntimeConfig{
-		Enabled: xpComp.IsEnabled(),
-		// TODO: will be fixed with https://github.com/openmcp-project/service-provider-crossplane/issues/176
-		// nolint:goconst
-		Name:   "default",
-		Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{}, // empty by default,
-	}
-	comps = append(comps, drc)
-
-	comps = append(comps, configureDRCForCustomCA(client, podNs, drc, pc, xpComp.IsEnabled())...)
 
 	return comps, nil
 }
@@ -692,9 +741,7 @@ func buildAllSecretComponents(ctx context.Context, cl client.Client, enabled boo
 	return comps, nil
 }
 
-func configureDRCForCustomCA(client client.Client, podNs string, drc *component.DeploymentRuntimeConfig, pc *v1alpha1.ProviderConfig, enabled bool) []juggler.Component {
-	comps := []juggler.Component{}
-
+func createCustomCAConfigMap(client client.Client, podNs string, pc *v1alpha1.ProviderConfig, enabled bool) juggler.Component {
 	if pc.Spec.CABundleRef != nil {
 		cm := &component.ConfigMap{
 			Enabled:      enabled,
@@ -708,8 +755,13 @@ func configureDRCForCustomCA(client client.Client, podNs string, drc *component.
 				Namespace: components.CrossplaneNamespace,
 			},
 		}
-		comps = append(comps, cm)
+		return cm
+	}
+	return nil
+}
 
+func configureDRCForCustomCA(drc *component.DeploymentRuntimeConfig, pc *v1alpha1.ProviderConfig) {
+	if pc.Spec.CABundleRef != nil {
 		drc.Config.DeploymentTemplate = crossplane.GetDeploymentTemplateForCABundleRef(&corev1.ConfigMapKeySelector{
 			LocalObjectReference: corev1.LocalObjectReference{
 				Name: crossplane.CABundleConfigMapName, // ConfigMap is always renamed to constant value
@@ -717,8 +769,6 @@ func configureDRCForCustomCA(client client.Client, podNs string, drc *component.
 			Key: pc.Spec.CABundleRef.Key,
 		})
 	}
-
-	return comps
 }
 
 func appendDistinct(slice []juggler.Component, elems ...juggler.Component) []juggler.Component {

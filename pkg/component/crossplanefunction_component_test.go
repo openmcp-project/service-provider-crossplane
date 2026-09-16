@@ -179,7 +179,7 @@ func Test_CrossplaneFunction(t *testing.T) {
 				hasName("FunctionPatchAndTransform"),
 				isEnabled(true),
 				isAllowed(true),
-				hasDependencies(1),
+				hasDependencies(2),
 				isTargetComponent(
 					hasNamespace("crossplane-system"),
 				),
@@ -194,6 +194,7 @@ func Test_CrossplaneFunction(t *testing.T) {
 						Message: "Healthy: Healthy",
 					}),
 					canBuildAndReconcile(nil),
+					hasRuntimeConfigRef("function-patch-and-transform"),
 					implementsOrphanedObjectsDetector(
 						listTypeIs(&crossplanev1.FunctionList{}),
 						hasFilterCriteria(2),

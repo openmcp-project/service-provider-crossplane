@@ -6,10 +6,14 @@ on:
       - opened
       - edited
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   validate_pr_content:
-    uses: openmcp-project/build/.github/workflows/validate-pr-content.lib.yaml@c2d37b930a47b3596b919583887f92c7e37987e3 # main
+    uses: openmcp-project/build/.github/workflows/validate-pr-content.lib.yaml@bd521defd1b749016638b329256d7971442bdf19 # main
     secrets: inherit
