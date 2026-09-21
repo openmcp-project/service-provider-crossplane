@@ -3,7 +3,7 @@ module github.com/openmcp-project/service-provider-crossplane
 go 1.27.1
 
 require (
-	github.com/crossplane/crossplane/apis/v2 v2.4.0
+	github.com/crossplane/crossplane/apis/v2 v2.4.1
 	github.com/fluxcd/helm-controller/api v1.6.4
 	github.com/fluxcd/kustomize-controller/api v1.9.5
 	github.com/fluxcd/pkg/apis/meta v1.31.0
