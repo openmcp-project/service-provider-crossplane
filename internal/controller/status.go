@@ -36,7 +36,7 @@ func computePhase(obj *v1alpha1.Crossplane, _ ctrlutils.ReconcileResult[*v1alpha
 		return commonapi.StatusPhaseProgressing, nil
 	}
 	for _, c := range obj.Status.Conditions {
-		if c.Status != metav1.ConditionTrue {
+		if c.Status != metav1.ConditionTrue && c.Reason != "Uninstalled" {
 			return commonapi.StatusPhaseProgressing, nil
 		}
 	}
@@ -51,7 +51,7 @@ func smartRequeueConditional(rr ctrlutils.ReconcileResult[*v1alpha1.Crossplane])
 		return ctrlutils.SR_NO_REQUEUE
 	}
 	for _, c := range rr.Object.Status.Conditions {
-		if c.Status != metav1.ConditionTrue {
+		if c.Status != metav1.ConditionTrue && c.Reason != "Uninstalled" {
 			return ctrlutils.SR_RESET
 		}
 	}
