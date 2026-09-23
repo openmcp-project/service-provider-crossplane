@@ -110,9 +110,9 @@ func Test_computePhase(t *testing.T) {
 
 func Test_smartRequeueConditional(t *testing.T) {
 	cases := []struct {
-		desc       string
-		object     *v1alpha1.Crossplane
-		want       ctrlutils.SmartRequeueAction
+		desc   string
+		object *v1alpha1.Crossplane
+		want   ctrlutils.SmartRequeueAction
 	}{
 		{
 			desc:   "nil object → NoRequeue",
