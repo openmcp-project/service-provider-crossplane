@@ -657,9 +657,11 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 
 		pullSecrets := convertImagePullSecrets(pc.Spec.Providers.ImagePullSecrets)
 		for _, provider := range xp.Spec.Providers {
+			pi := pollIntervalForProvider(pc, provider.Name)
 			drc := &component.DeploymentRuntimeConfig{
-				Enabled: xpComp.IsEnabled(),
-				Name:    provider.Name,
+				Enabled:      xpComp.IsEnabled(),
+				Name:         provider.Name,
+				PollInterval: pi,
 				Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 					ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
 						Metadata: &crossplanev1beta1.ObjectMeta{
@@ -716,6 +718,18 @@ func prefixChartPullSecretName(ref *commonapi.LocalObjectReference) (string, err
 		return "", fmt.Errorf("error generating secret name: %w", err)
 	}
 	return name, nil
+}
+
+// pollIntervalForProvider returns the poll interval configured for the named
+// provider in the ProviderConfig, or nil if none is set.
+func pollIntervalForProvider(pc *v1alpha1.ProviderConfig, name string) *string {
+	for _, ap := range pc.Spec.Providers.AvailableProviders {
+		if ap.Name == name && ap.PollInterval != "" {
+			pi := ap.PollInterval
+			return &pi
+		}
+	}
+	return nil
 }
 
 func buildAllSecretComponents(ctx context.Context, cl client.Client, enabled bool, chartPullSecret *commonapi.LocalObjectReference, prefixedChartPullSecret string, imagePullSecrets []commonapi.LocalObjectReference, podNs string, pc *v1alpha1.ProviderConfig) ([]juggler.Component, error) {
