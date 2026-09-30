@@ -36,6 +36,10 @@ type AvailableCrossplaneProvider struct {
 	// Package is the package name of the provider.
 	// +kubebuilder:validation:Required
 	Package string `json:"package"`
+
+	// The PollInterval for the provider
+	// +kubebuilder:validation:Optional
+	PollInterval string `json:"pollInterval"`
 }
 
 // CrossplaneProviders represents the configutation of Crossplane providers and and their image pull secrets.
