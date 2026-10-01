@@ -39,7 +39,7 @@ type AvailableCrossplaneProvider struct {
 
 	// The PollInterval for the provider
 	// +kubebuilder:validation:Optional
-	PollInterval string `json:"pollInterval,omitempty"`
+	PollInterval *metav1.Duration `json:"pollInterval,omitempty"`
 }
 
 // CrossplaneProviders represents the configutation of Crossplane providers and and their image pull secrets.

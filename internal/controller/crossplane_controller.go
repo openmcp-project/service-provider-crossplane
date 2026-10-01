@@ -720,13 +720,11 @@ func prefixChartPullSecretName(ref *commonapi.LocalObjectReference) (string, err
 	return name, nil
 }
 
-// pollIntervalForProvider returns the poll interval configured for the named
-// provider in the ProviderConfig, or nil if none is set.
-func pollIntervalForProvider(pc *v1alpha1.ProviderConfig, name string) *string {
+func pollIntervalForProvider(pc *v1alpha1.ProviderConfig, name string) *metav1.Duration {
 	for _, ap := range pc.Spec.Providers.AvailableProviders {
-		if ap.Name == name && ap.PollInterval != "" {
+		if ap.Name == name && ap.PollInterval != nil {
 			pi := ap.PollInterval
-			return &pi
+			return pi
 		}
 	}
 	return nil
