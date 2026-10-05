@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
+
 	"github.com/openmcp-project/service-provider-crossplane/pkg/utils"
 )
 
