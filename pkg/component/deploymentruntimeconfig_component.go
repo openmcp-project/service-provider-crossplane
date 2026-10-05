@@ -57,9 +57,6 @@ func (d *DeploymentRuntimeConfig) ReconcileObject(_ context.Context, obj client.
 	}
 	if utils.IsPIManaged(drc) {
 		poll = d.PollInterval
-		if d.PollInterval == nil {
-			removePollArg(d.Config)
-		}
 	}
 	setPollArg(d.Config, poll)
 	drc.Spec = *d.Config
@@ -112,28 +109,6 @@ func setPollArg(drcSpec *crossplanev1beta1.DeploymentRuntimeConfigSpec, pollInte
 	}
 	containers[idx].Args = append(containers[idx].Args, fmt.Sprintf("--poll=%s", pollInterval.Duration))
 	drcSpec.DeploymentTemplate.Spec.Template.Spec.Containers = containers
-}
-
-// removePollArg removes a --poll arg set on the package-runtime container in the DRC's deployment template is removed
-func removePollArg(drcSpec *crossplanev1beta1.DeploymentRuntimeConfigSpec) {
-	if drcSpec == nil || drcSpec.DeploymentTemplate == nil || drcSpec.DeploymentTemplate.Spec == nil {
-		return
-	}
-	containers := drcSpec.DeploymentTemplate.Spec.Template.Spec.Containers
-	idx := slices.IndexFunc(containers, func(c v1.Container) bool {
-		return c.Name == "package-runtime"
-	})
-	if idx == -1 {
-		return
-	}
-	args := containers[idx].Args
-	i := slices.IndexFunc(args, func(a string) bool {
-		return strings.HasPrefix(a, "--poll=")
-	})
-	if i != -1 {
-		args = append(args[:i], args[i+1:]...)
-	}
-	drcSpec.DeploymentTemplate.Spec.Template.Spec.Containers[idx].Args = args
 }
 
 // OrphanDetectorContext implements object.OrphanedObjectsDetector.
