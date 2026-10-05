@@ -200,7 +200,7 @@ func Test_setPollArg(t *testing.T) {
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			setPollArg(tC.drc, tC.poll)
+			setPollArg(&tC.drc.Spec, &tC.poll)
 
 			assert.Equal(t, tC.wantArgs, packageRuntimeArgs(tC.drc))
 
@@ -260,6 +260,79 @@ func Test_existingPollArg(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tC.want, got)
+		})
+	}
+}
+
+func Test_removePollArg(t *testing.T) {
+	testCases := []struct {
+		desc          string
+		drc           *crossplanev1beta1.DeploymentRuntimeConfig
+		wantArgs      []string
+		wantOtherKept bool
+	}{
+		{
+			desc: "no-op on nil spec",
+			drc:  nil,
+		},
+		{
+			desc: "no-op when DeploymentTemplate is nil",
+			drc:  &crossplanev1beta1.DeploymentRuntimeConfig{},
+		},
+		{
+			desc: "no-op when DeploymentTemplate.Spec is nil",
+			drc: &crossplanev1beta1.DeploymentRuntimeConfig{
+				Spec: crossplanev1beta1.DeploymentRuntimeConfigSpec{
+					DeploymentTemplate: &crossplanev1beta1.DeploymentTemplate{},
+				},
+			},
+		},
+		{
+			desc:          "no-op when package-runtime is absent; unrelated container keeps its args",
+			drc:           drcWithContainer("sidecar", "--poll=5m"),
+			wantArgs:      nil,
+			wantOtherKept: true,
+		},
+		{
+			desc:     "no-op when package-runtime has no --poll arg",
+			drc:      drcWithContainer("package-runtime", "--debug"),
+			wantArgs: []string{"--debug"},
+		},
+		{
+			desc:     "removes --poll when it is the only arg",
+			drc:      drcWithContainer("package-runtime", "--poll=5m0s"),
+			wantArgs: []string{},
+		},
+		{
+			desc:     "removes only --poll and keeps surrounding args",
+			drc:      drcWithContainer("package-runtime", "--debug", "--poll=5m0s", "--verbose"),
+			wantArgs: []string{"--debug", "--verbose"},
+		},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			var spec *crossplanev1beta1.DeploymentRuntimeConfigSpec
+			if tC.drc != nil {
+				spec = &tC.drc.Spec
+			}
+			removePollArg(spec)
+
+			if tC.drc == nil {
+				return
+			}
+
+			assert.Equal(t, tC.wantArgs, packageRuntimeArgs(tC.drc))
+
+			if tC.wantOtherKept {
+				var found bool
+				for _, c := range tC.drc.Spec.DeploymentTemplate.Spec.Template.Spec.Containers {
+					if c.Name == "sidecar" {
+						found = true
+						assert.Equal(t, []string{"--poll=5m"}, c.Args)
+					}
+				}
+				assert.True(t, found, "unrelated container should be preserved")
+			}
 		})
 	}
 }
