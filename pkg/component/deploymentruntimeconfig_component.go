@@ -48,22 +48,21 @@ func (d *DeploymentRuntimeConfig) BuildObjectToReconcile(_ context.Context) (cli
 func (d *DeploymentRuntimeConfig) ReconcileObject(_ context.Context, obj client.Object) error {
 	drc := obj.(*crossplanev1beta1.DeploymentRuntimeConfig)
 	utils.SetManagedBy(drc)
+	utils.SetPIManaged(drc)
 
 	// Read any manually-set poll interval from live object before spec is overwritten.
-	// A manual value takes precedence over the value from the ProviderConfig
 	poll, err := existingPollArg(drc)
 	if err != nil {
 		return fmt.Errorf("could not retrieve poll interval: %w", err)
 	}
-	if poll == nil && d.PollInterval != nil {
+	if utils.IsPIManaged(drc) {
 		poll = d.PollInterval
+		if d.PollInterval == nil {
+			removePollArg(d.Config)
+		}
 	}
-
+	setPollArg(d.Config, poll)
 	drc.Spec = *d.Config
-
-	if poll != nil {
-		setPollArg(drc, *poll)
-	}
 
 	return nil
 }
@@ -93,14 +92,17 @@ func existingPollArg(drc *crossplanev1beta1.DeploymentRuntimeConfig) (*metav1.Du
 }
 
 // setPollArg ensures the package-runtime container in the DRC's deployment template carries a --poll= arg with the given value.
-func setPollArg(drc *crossplanev1beta1.DeploymentRuntimeConfig, pollInterval metav1.Duration) {
-	if drc.Spec.DeploymentTemplate == nil {
-		drc.Spec.DeploymentTemplate = &crossplanev1beta1.DeploymentTemplate{}
+func setPollArg(drcSpec *crossplanev1beta1.DeploymentRuntimeConfigSpec, pollInterval *metav1.Duration) {
+	if pollInterval == nil || drcSpec == nil {
+		return
 	}
-	if drc.Spec.DeploymentTemplate.Spec == nil {
-		drc.Spec.DeploymentTemplate.Spec = &appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{}}
+	if drcSpec.DeploymentTemplate == nil {
+		drcSpec.DeploymentTemplate = &crossplanev1beta1.DeploymentTemplate{}
 	}
-	containers := drc.Spec.DeploymentTemplate.Spec.Template.Spec.Containers
+	if drcSpec.DeploymentTemplate.Spec == nil {
+		drcSpec.DeploymentTemplate.Spec = &appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{}}
+	}
+	containers := drcSpec.DeploymentTemplate.Spec.Template.Spec.Containers
 	idx := slices.IndexFunc(containers, func(c v1.Container) bool {
 		return c.Name == "package-runtime"
 	})
@@ -109,7 +111,29 @@ func setPollArg(drc *crossplanev1beta1.DeploymentRuntimeConfig, pollInterval met
 		idx = len(containers) - 1
 	}
 	containers[idx].Args = append(containers[idx].Args, fmt.Sprintf("--poll=%s", pollInterval.Duration))
-	drc.Spec.DeploymentTemplate.Spec.Template.Spec.Containers = containers
+	drcSpec.DeploymentTemplate.Spec.Template.Spec.Containers = containers
+}
+
+// removePollArg removes a --poll arg set on the package-runtime container in the DRC's deployment template is removed
+func removePollArg(drcSpec *crossplanev1beta1.DeploymentRuntimeConfigSpec) {
+	if drcSpec == nil || drcSpec.DeploymentTemplate == nil || drcSpec.DeploymentTemplate.Spec == nil {
+		return
+	}
+	containers := drcSpec.DeploymentTemplate.Spec.Template.Spec.Containers
+	idx := slices.IndexFunc(containers, func(c v1.Container) bool {
+		return c.Name == "package-runtime"
+	})
+	if idx == -1 {
+		return
+	}
+	args := containers[idx].Args
+	i := slices.IndexFunc(args, func(a string) bool {
+		return strings.HasPrefix(a, "--poll=")
+	})
+	if i != -1 {
+		args = append(args[:i], args[i+1:]...)
+	}
+	drcSpec.DeploymentTemplate.Spec.Template.Spec.Containers[idx].Args = args
 }
 
 // OrphanDetectorContext implements object.OrphanedObjectsDetector.
