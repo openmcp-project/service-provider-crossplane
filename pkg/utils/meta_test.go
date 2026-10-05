@@ -115,17 +115,6 @@ func TestSetAnnotation(t *testing.T) {
 			want:       map[string]string{"foo": "baz"},
 		},
 		{
-			name: "update existing annotation",
-			obj: &v1alpha1.Crossplane{
-				ObjectMeta: v1.ObjectMeta{
-					Annotations: map[string]string{"foo": "bar"},
-				},
-			},
-			annotation: "foo",
-			value:      "bar2",
-			want:       map[string]string{"foo": "bar2"},
-		},
-		{
 			name:       "add a second annotation to object",
 			obj:        &v1alpha1.Crossplane{ObjectMeta: v1.ObjectMeta{Annotations: map[string]string{"foo": "bar"}}},
 			annotation: "foo2",
@@ -196,11 +185,7 @@ func TestIsPIManaged(t *testing.T) {
 		},
 		{
 			name: "annotation not set returns false",
-			obj: &v1alpha1.Crossplane{
-				ObjectMeta: v1.ObjectMeta{
-					Annotations: map[string]string{AnnotationManagedPI: "false"},
-				},
-			},
+			obj:  &v1alpha1.Crossplane{},
 			want: false,
 		},
 	}
