@@ -143,6 +143,9 @@ spec:
                         package:
                           description: Package is the package name of the provider.
                           type: string
+                        pollInterval:
+                          description: The PollInterval for the provider
+                          type: string
                         versions:
                           description: Version of the provider to install.
                           items:

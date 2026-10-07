@@ -110,6 +110,7 @@ spec:
         versions:
           - v0.16.0
           - v0.15.0
+        pollInterval: 10m # optional
     imagePullSecretRefs:
       - name: secretforprivateproviders
       - name: xyz
