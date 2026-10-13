@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	crossplanev1beta1 "github.com/crossplane/crossplane/apis/v2/pkg/v1beta1"
 	"golang.org/x/text/cases"
@@ -47,50 +46,37 @@ func (d *DeploymentRuntimeConfig) BuildObjectToReconcile(_ context.Context) (cli
 // ReconcileObject implements object.ObjectComponent.
 func (d *DeploymentRuntimeConfig) ReconcileObject(_ context.Context, obj client.Object) error {
 	drc := obj.(*crossplanev1beta1.DeploymentRuntimeConfig)
-	utils.SetManagedBy(drc)
-	utils.SetPIManaged(drc)
+	args := getArgs(drc)
 
-	// Read any manually-set poll interval from live object before spec is overwritten.
-	poll, err := existingPollArg(drc)
-	if err != nil {
-		return fmt.Errorf("could not retrieve poll interval: %w", err)
+	if drc.GetResourceVersion() == "" && !existingPollArg(args) && d.PollInterval != nil {
+		setArgs(d.Config, []string{fmt.Sprintf("--poll=%s", d.PollInterval.Duration)})
+	} else {
+		setArgs(d.Config, args)
 	}
-	if utils.IsPIManaged(drc) {
-		poll = d.PollInterval
-	}
-	setPollArg(d.Config, poll)
+
 	drc.Spec = *d.Config
 
 	return nil
 }
 
-// existingPollArg returns the --poll= value already set on the package-runtime container if set.
-func existingPollArg(drc *crossplanev1beta1.DeploymentRuntimeConfig) (*metav1.Duration, error) {
+// getArgs returns the arguments of the package-runtime container.
+func getArgs(drc *crossplanev1beta1.DeploymentRuntimeConfig) []string {
 	dt := drc.Spec.DeploymentTemplate
 	if dt == nil || dt.Spec == nil {
-		return nil, nil
+		return nil
 	}
 	for _, c := range dt.Spec.Template.Spec.Containers {
 		if c.Name != "package-runtime" {
 			continue
 		}
-		for _, arg := range c.Args {
-			v, ok := strings.CutPrefix(arg, "--poll=")
-			if ok {
-				d, err := time.ParseDuration(v)
-				if err != nil {
-					return nil, fmt.Errorf("could not parse poll interval: %w", err)
-				}
-				return &metav1.Duration{Duration: d}, nil
-			}
-		}
+		return c.Args
 	}
-	return nil, nil
+	return nil
 }
 
-// setPollArg ensures the package-runtime container in the DRC's deployment template carries a --poll= arg with the given value.
-func setPollArg(drcSpec *crossplanev1beta1.DeploymentRuntimeConfigSpec, pollInterval *metav1.Duration) {
-	if pollInterval == nil || drcSpec == nil {
+// setsArgs sets the passed args on the package-runtime container.
+func setArgs(drcSpec *crossplanev1beta1.DeploymentRuntimeConfigSpec, args []string) {
+	if drcSpec == nil || args == nil {
 		return
 	}
 	if drcSpec.DeploymentTemplate == nil {
@@ -107,8 +93,19 @@ func setPollArg(drcSpec *crossplanev1beta1.DeploymentRuntimeConfigSpec, pollInte
 		containers = append(containers, v1.Container{Name: "package-runtime"})
 		idx = len(containers) - 1
 	}
-	containers[idx].Args = append(containers[idx].Args, fmt.Sprintf("--poll=%s", pollInterval.Duration))
+	containers[idx].Args = args
 	drcSpec.DeploymentTemplate.Spec.Template.Spec.Containers = containers
+}
+
+// existingPollArg returns true if there is a --poll flag among the arguments.
+func existingPollArg(args []string) bool {
+	for _, arg := range args {
+		_, ok := strings.CutPrefix(arg, "--poll=")
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 // OrphanDetectorContext implements object.OrphanedObjectsDetector.
