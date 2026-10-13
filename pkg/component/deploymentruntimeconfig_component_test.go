@@ -14,8 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/openmcp-project/control-plane-operator/pkg/juggler"
-
-	"github.com/openmcp-project/service-provider-crossplane/pkg/utils"
 )
 
 var (
@@ -172,46 +170,76 @@ func Test_DeploymentRuntimeConfig(t *testing.T) {
 	}
 }
 
-func Test_setPollArg(t *testing.T) {
+func Test_getArgs(t *testing.T) {
+	testCases := []struct {
+		desc     string
+		drc      *crossplanev1beta1.DeploymentRuntimeConfig
+		wantArgs []string
+	}{
+		{
+			desc:     "package-runtime container returns args",
+			drc:      testDRC("1", []v1.Container{{Name: "package-runtime", Args: []string{"--arg=one", "--arg=two"}}}),
+			wantArgs: []string{"--arg=one", "--arg=two"},
+		},
+		{
+			desc:     "no package-runtime container returns no args",
+			drc:      testDRC("1", []v1.Container{{Name: "not-package-runtime", Args: []string{"--arg=one", "--arg=two"}}}),
+			wantArgs: nil,
+		},
+		{
+			desc:     "multiple containers only returns package-runtime containers args",
+			drc:      testDRC("1", []v1.Container{{Name: "not-package-runtime", Args: []string{"--arg=one", "--arg=two"}}, {Name: "package-runtime", Args: []string{"--arg=one", "--arg=two"}}}),
+			wantArgs: []string{"--arg=one", "--arg=two"},
+		},
+	}
+	for _, tC := range testCases {
+		t.Run(tC.desc, func(t *testing.T) {
+			args := getArgs(tC.drc)
+			assert.Equal(t, tC.wantArgs, args)
+		})
+	}
+}
+
+func Test_setArgs(t *testing.T) {
 	testCases := []struct {
 		desc          string
 		drc           *crossplanev1beta1.DeploymentRuntimeConfig
-		poll          metav1.Duration
+		args          []string
 		wantArgs      []string
-		wantOtherKept bool // "other" container should still be present untouched
+		wantOtherKept bool
 	}{
 		{
 			desc:     "creates template, spec and container when absent",
 			drc:      &crossplanev1beta1.DeploymentRuntimeConfig{},
-			poll:     metav1.Duration{Duration: 5 * time.Minute},
+			args:     []string{"--poll=5m0s"},
 			wantArgs: []string{"--poll=5m0s"},
 		},
 		{
-			desc:     "appends to an existing package-runtime container, preserving its args",
-			drc:      drcWithContainer("package-runtime", nil, "--debug"),
-			poll:     metav1.Duration{Duration: 90 * time.Second},
-			wantArgs: []string{"--debug", "--poll=1m30s"},
+			desc:     "overrides existing package-runtime args",
+			drc:      testDRC("1", []v1.Container{{Name: "package-runtime", Args: []string{"--arg=one", "--arg=two"}}}),
+			args:     []string{"--poll=5m0s"},
+			wantArgs: []string{"--poll=5m0s"},
 		},
 		{
-			desc:          "adds package-runtime alongside an unrelated container",
-			drc:           drcWithContainer("sidecar", nil, "--foo"),
-			poll:          metav1.Duration{Duration: time.Hour},
-			wantArgs:      []string{"--poll=1h0m0s"},
+			desc:          "only changes package-runtime",
+			drc:           testDRC("1", []v1.Container{{Name: "not-package-runtime", Args: []string{"--arg=one", "--arg=two"}}, {Name: "package-runtime", Args: []string{"--arg=one", "--arg=two"}}}),
+			args:          []string{"--poll=5m0s"},
+			wantArgs:      []string{"--poll=5m0s"},
 			wantOtherKept: true,
 		},
 	}
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			setPollArg(&tC.drc.Spec, &tC.poll)
+			setArgs(&tC.drc.Spec, tC.args)
 
 			assert.Equal(t, tC.wantArgs, packageRuntimeArgs(tC.drc))
 
 			if tC.wantOtherKept {
 				var found bool
 				for _, c := range tC.drc.Spec.DeploymentTemplate.Spec.Template.Spec.Containers {
-					if c.Name == "sidecar" {
+					if c.Name == "not-package-runtime" {
 						found = true
-						assert.Equal(t, []string{"--foo"}, c.Args)
+						assert.Equal(t, []string{"--arg=one", "--arg=two"}, c.Args)
 					}
 				}
 				assert.True(t, found, "unrelated container should be preserved")
@@ -220,102 +248,30 @@ func Test_setPollArg(t *testing.T) {
 	}
 }
 
-func Test_existingPollArg(t *testing.T) {
-	testCases := []struct {
-		desc    string
-		drc     *crossplanev1beta1.DeploymentRuntimeConfig
-		want    *metav1.Duration
-		wantErr bool
-	}{
-		{
-			desc: "nil when no deployment template",
-			drc:  &crossplanev1beta1.DeploymentRuntimeConfig{},
-			want: nil,
-		},
-		{
-			desc: "nil when package-runtime has no --poll arg",
-			drc:  drcWithContainer("package-runtime", nil, "--debug"),
-			want: nil,
-		},
-		{
-			desc: "nil when --poll is on a different container",
-			drc:  drcWithContainer("sidecar", nil, "--poll=5m"),
-			want: nil,
-		},
-		{
-			desc: "returns parsed duration when present",
-			drc:  drcWithContainer("package-runtime", nil, "--debug", "--poll=90s"),
-			want: &metav1.Duration{Duration: 90 * time.Second},
-		},
-		{
-			desc:    "errors on malformed duration",
-			drc:     drcWithContainer("package-runtime", nil, "--poll=duration"),
-			wantErr: true,
-		},
-	}
-	for _, tC := range testCases {
-		t.Run(tC.desc, func(t *testing.T) {
-			got, err := existingPollArg(tC.drc)
-			if tC.wantErr {
-				assert.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tC.want, got)
-		})
-	}
-}
-
 func Test_DeploymentRuntimeConfig_PollInterval(t *testing.T) {
 	testCases := []struct {
-		desc            string
-		pollInterval    *metav1.Duration
-		obj             *crossplanev1beta1.DeploymentRuntimeConfig
-		wantArgs        []string
-		wantAnnotation  string
-		wantNilTemplate bool
+		desc         string
+		pollInterval *metav1.Duration
+		obj          *crossplanev1beta1.DeploymentRuntimeConfig
+		wantArgs     []string
 	}{
 		{
-			desc:           "adds annotation and uses providerconfig when no annotation present",
-			pollInterval:   &metav1.Duration{Duration: 5 * time.Minute},
-			obj:            drcWithContainer("package-runtime", nil),
-			wantAnnotation: "true",
-			wantArgs:       []string{"--poll=5m0s"},
+			desc:         "adds no poll interval when not set",
+			pollInterval: nil,
+			obj:          testDRC("", []v1.Container{{Name: "package-runtime"}}),
+			wantArgs:     nil,
 		},
 		{
-			desc:           "adds annotation and providerconfig overwrites manually set when no annotation present",
-			pollInterval:   &metav1.Duration{Duration: 5 * time.Minute},
-			obj:            drcWithContainer("package-runtime", nil, "--poll=10m0s"),
-			wantAnnotation: "true",
-			wantArgs:       []string{"--poll=5m0s"},
+			desc:         "adds poll interval when set and drc does not exist",
+			pollInterval: &metav1.Duration{Duration: 5 * time.Minute},
+			obj:          testDRC("", []v1.Container{{Name: "package-runtime"}}),
+			wantArgs:     []string{"--poll=5m0s"},
 		},
 		{
-			desc:           "uses ProviderConfig when managed",
-			pollInterval:   &metav1.Duration{Duration: 5 * time.Minute},
-			obj:            drcWithContainer("package-runtime", map[string]string{utils.AnnotationManagedPI: "true"}),
-			wantAnnotation: "true",
-			wantArgs:       []string{"--poll=5m0s"},
-		},
-		{
-			desc:           "overrides manually set when managed",
-			pollInterval:   &metav1.Duration{Duration: 5 * time.Minute},
-			obj:            drcWithContainer("package-runtime", map[string]string{utils.AnnotationManagedPI: "true"}, "--poll=10m0s"),
-			wantAnnotation: "true",
-			wantArgs:       []string{"--poll=5m0s"},
-		},
-		{
-			desc:           "manually set takes precedence when unmanaged",
-			pollInterval:   &metav1.Duration{Duration: 5 * time.Minute},
-			obj:            drcWithContainer("package-runtime", map[string]string{utils.AnnotationManagedPI: "false"}, "--poll=10m0s"),
-			wantAnnotation: "false",
-			wantArgs:       []string{"--poll=10m0s"},
-		},
-		{
-			desc:            "no arg added when neither config nor live object set it",
-			pollInterval:    nil,
-			obj:             drcWithContainer("package-runtime", map[string]string{utils.AnnotationManagedPI: "true"}),
-			wantAnnotation:  "true",
-			wantNilTemplate: true,
+			desc:         "does not overwrite when drc already existed",
+			pollInterval: &metav1.Duration{Duration: 5 * time.Minute},
+			obj:          testDRC("1", []v1.Container{{Name: "package-runtime", Args: []string{"--poll=1m0s"}}}),
+			wantArgs:     []string{"--poll=1m0s"},
 		},
 	}
 	for _, tC := range testCases {
@@ -326,15 +282,6 @@ func Test_DeploymentRuntimeConfig_PollInterval(t *testing.T) {
 			}
 			require.NoError(t, c.ReconcileObject(context.Background(), tC.obj))
 
-			if tC.wantAnnotation != "" {
-				a, ok := tC.obj.Annotations[utils.AnnotationManagedPI]
-				assert.True(t, ok)
-				assert.Equal(t, tC.wantAnnotation, a)
-			}
-			if tC.wantNilTemplate {
-				assert.Nil(t, tC.obj.Spec.DeploymentTemplate)
-				return
-			}
 			assert.Equal(t, tC.wantArgs, packageRuntimeArgs(tC.obj))
 		})
 	}
@@ -353,17 +300,17 @@ func packageRuntimeArgs(drc *crossplanev1beta1.DeploymentRuntimeConfig) []string
 	return nil
 }
 
-func drcWithContainer(name string, annotations map[string]string, args ...string) *crossplanev1beta1.DeploymentRuntimeConfig {
+func testDRC(resourceVersion string, containers []v1.Container) *crossplanev1beta1.DeploymentRuntimeConfig {
 	return &crossplanev1beta1.DeploymentRuntimeConfig{
 		ObjectMeta: metav1.ObjectMeta{
-			Annotations: annotations,
+			ResourceVersion: resourceVersion,
 		},
 		Spec: crossplanev1beta1.DeploymentRuntimeConfigSpec{
 			DeploymentTemplate: &crossplanev1beta1.DeploymentTemplate{
 				Spec: &appsv1.DeploymentSpec{
 					Template: v1.PodTemplateSpec{
 						Spec: v1.PodSpec{
-							Containers: []v1.Container{{Name: name, Args: args}},
+							Containers: containers,
 						},
 					},
 				},
