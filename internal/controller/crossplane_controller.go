@@ -650,6 +650,15 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 		comps = append(comps, cm)
 	}
 
+	// create default DeploymentRuntimeConfig with potential customCA configuration
+	defaultDRC := &component.DeploymentRuntimeConfig{
+		Enabled: xpComp.IsEnabled(),
+		Name:    "default",
+		Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{}, // empty by default,
+	}
+	configureDRCForCustomCA(defaultDRC, pc)
+	comps = append(comps, defaultDRC)
+
 	if xp.Spec.Providers != nil {
 		if len(pc.Spec.Providers.AvailableProviders) == 0 {
 			return nil, errors.New("providers are specified in Crossplane instance but no available providers configured in ProviderConfig")
@@ -703,7 +712,6 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 			})
 		}
 	}
-
 	return comps, nil
 }
 
