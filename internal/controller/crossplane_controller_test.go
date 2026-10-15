@@ -242,6 +242,11 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
 					Name:    p1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
@@ -342,6 +347,11 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
 					Name:    p1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
@@ -419,6 +429,11 @@ func Test_buildComponents(t *testing.T) {
 					Source:       client.ObjectKey{Name: "image-secret", Namespace: "pod-namespace"},
 					Target:       client.ObjectKey{Name: "image-secret", Namespace: component.CrossplaneNamespace},
 					Enabled:      true,
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
@@ -514,6 +529,11 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: false,
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: false,
 					Name:    p1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
@@ -579,6 +599,57 @@ func Test_buildComponents(t *testing.T) {
 				&component.CrossplaneProvider{
 					Enabled: true,
 					Config:  &v1alpha1.CrossplaneProviderConfig{Name: "provider-1", Version: "v0.1.0"},
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
+					Name:    "default",
+					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
+						DeploymentTemplate: &crossplanev1beta1.DeploymentTemplate{
+							Spec: &appsv1.DeploymentSpec{
+								Selector: &metav1.LabelSelector{},
+								Template: corev1.PodTemplateSpec{
+									Spec: corev1.PodSpec{
+										Containers: []corev1.Container{
+											{
+												Name: "package-runtime",
+												VolumeMounts: []corev1.VolumeMount{
+													{
+														MountPath: "/etc/open-control-plane/custom-ca",
+														Name:      "custom-ca-bundle",
+														ReadOnly:  true,
+													},
+												},
+												Env: []corev1.EnvVar{
+													{
+														Name:  "SSL_CERT_DIR",
+														Value: "/etc/ssl/certs:/etc/pki/tls/certs:/etc/open-control-plane/custom-ca",
+													},
+												},
+											},
+										},
+										Volumes: []corev1.Volume{
+											{
+												Name: "custom-ca-bundle",
+												VolumeSource: corev1.VolumeSource{
+													ConfigMap: &corev1.ConfigMapVolumeSource{
+														LocalObjectReference: corev1.LocalObjectReference{
+															Name: "custom-ca-bundle",
+														},
+														Items: []corev1.KeyToPath{
+															{
+																Key:  "ca-bundle.crt",
+																Path: "ca-bundle.crt",
+															},
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
@@ -695,6 +766,11 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
 					Name:    f1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
@@ -759,6 +835,11 @@ func Test_buildComponents(t *testing.T) {
 				&component.CrossplaneFunction{
 					Enabled: true,
 					Config:  &v1alpha1.CrossplaneFunctionConfig{Name: "function-1", Version: "v0.2.0"},
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
@@ -860,6 +941,11 @@ func Test_buildComponents(t *testing.T) {
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
 					Name:    f1,
 					Config: &crossplanev1beta1.DeploymentRuntimeConfigSpec{
 						ServiceAccountTemplate: &crossplanev1beta1.ServiceAccountTemplate{
@@ -924,6 +1010,11 @@ func Test_buildComponents(t *testing.T) {
 					Enabled:     true,
 					Config:      &v1alpha1.CrossplaneFunctionConfig{Name: "function-1", Version: "v0.1.0"},
 					PullSecrets: []corev1.LocalObjectReference{{Name: "shared-pull-secret"}},
+				},
+				&component.DeploymentRuntimeConfig{
+					Enabled: true,
+					Name:    "default",
+					Config:  &crossplanev1beta1.DeploymentRuntimeConfigSpec{},
 				},
 				&component.DeploymentRuntimeConfig{
 					Enabled: true,
