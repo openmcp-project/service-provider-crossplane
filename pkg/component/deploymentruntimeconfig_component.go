@@ -46,6 +46,7 @@ func (d *DeploymentRuntimeConfig) BuildObjectToReconcile(_ context.Context) (cli
 // ReconcileObject implements object.ObjectComponent.
 func (d *DeploymentRuntimeConfig) ReconcileObject(_ context.Context, obj client.Object) error {
 	drc := obj.(*crossplanev1beta1.DeploymentRuntimeConfig)
+	utils.SetManagedBy(drc)
 	args := getArgs(drc)
 
 	if drc.GetResourceVersion() == "" && !existingPollArg(args) && d.PollInterval != nil {
