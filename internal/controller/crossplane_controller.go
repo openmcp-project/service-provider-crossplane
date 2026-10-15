@@ -576,12 +576,18 @@ func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Cont
 
 	conditions := []metav1.Condition{}
 	for _, componentResult := range result {
-		if !componentResult.Component.IsEnabled() && (componentResult.Result == juggler.StatusDisabled || componentResult.Result == juggler.StatusUninstalled) {
-			// Component is not enabled and has been disabled or uninstalled.
+		if !componentResult.Component.IsEnabled() && componentResult.Result == juggler.StatusDisabled {
+			// Component is not enabled and has never been installed or was disabled before being installed.
 			// Don't output a condition in this case.
 			continue
 		}
-		conditions = append(conditions, componentResult.ToCondition())
+		c := componentResult.ToCondition()
+		if componentResult.Result == juggler.StatusUninstalled {
+			// Component was cleanly removed. Emit Status=True so the condition overwrites any
+			// stale "Healthy/Installed" condition and does not block phase computation.
+			c.Status = metav1.ConditionTrue
+		}
+		conditions = append(conditions, c)
 	}
 
 	return conditions, nil

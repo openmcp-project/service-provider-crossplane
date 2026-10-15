@@ -58,27 +58,27 @@ func Test_computePhase(t *testing.T) {
 			want: commonapi.StatusPhaseProgressing,
 		},
 		{
-			desc: "False/Uninstalled condition only → Ready (not Progressing)",
+			desc: "True/Uninstalled condition alongside healthy ones → Ready",
 			conditions: []metav1.Condition{
 				cond("CrossplaneReady", metav1.ConditionTrue, "Healthy"),
-				cond("ProviderCloudfoundryReady", metav1.ConditionFalse, "Uninstalled"),
+				cond("ProviderCloudfoundryReady", metav1.ConditionTrue, "Uninstalled"),
 			},
 			want: commonapi.StatusPhaseReady,
 		},
 		{
-			desc: "multiple Uninstalled conditions alongside healthy ones → Ready",
+			desc: "multiple True/Uninstalled conditions alongside healthy ones → Ready",
 			conditions: []metav1.Condition{
 				cond("CrossplaneReady", metav1.ConditionTrue, "Healthy"),
-				cond("ProviderCloudfoundryReady", metav1.ConditionFalse, "Uninstalled"),
-				cond("DeploymentRuntimeConfigDefaultReady", metav1.ConditionFalse, "Uninstalled"),
+				cond("ProviderCloudfoundryReady", metav1.ConditionTrue, "Uninstalled"),
+				cond("DeploymentRuntimeConfigDefaultReady", metav1.ConditionTrue, "Uninstalled"),
 			},
 			want: commonapi.StatusPhaseReady,
 		},
 		{
-			desc: "Uninstalled and a real failure → Progressing",
+			desc: "True/Uninstalled and a real failure → Progressing",
 			conditions: []metav1.Condition{
 				cond("CrossplaneReady", metav1.ConditionTrue, "Healthy"),
-				cond("ProviderCloudfoundryReady", metav1.ConditionFalse, "Uninstalled"),
+				cond("ProviderCloudfoundryReady", metav1.ConditionTrue, "Uninstalled"),
 				cond("ProviderBtpReady", metav1.ConditionFalse, "Unhealthy"),
 			},
 			want: commonapi.StatusPhaseProgressing,
@@ -142,25 +142,25 @@ func Test_smartRequeueConditional(t *testing.T) {
 			want: ctrlutils.SR_RESET,
 		},
 		{
-			desc: "False/Uninstalled only → Backoff (not Reset)",
+			desc: "True/Uninstalled only → Backoff",
 			object: &v1alpha1.Crossplane{
 				Status: v1alpha1.CrossplaneStatus{
 					Conditions: []metav1.Condition{
 						cond("CrossplaneReady", metav1.ConditionTrue, "Healthy"),
-						cond("ProviderCloudfoundryReady", metav1.ConditionFalse, "Uninstalled"),
-						cond("DeploymentRuntimeConfigDefaultReady", metav1.ConditionFalse, "Uninstalled"),
+						cond("ProviderCloudfoundryReady", metav1.ConditionTrue, "Uninstalled"),
+						cond("DeploymentRuntimeConfigDefaultReady", metav1.ConditionTrue, "Uninstalled"),
 					},
 				},
 			},
 			want: ctrlutils.SR_BACKOFF,
 		},
 		{
-			desc: "Uninstalled and real failure → Reset",
+			desc: "True/Uninstalled and real failure → Reset",
 			object: &v1alpha1.Crossplane{
 				Status: v1alpha1.CrossplaneStatus{
 					Conditions: []metav1.Condition{
 						cond("CrossplaneReady", metav1.ConditionTrue, "Healthy"),
-						cond("ProviderCloudfoundryReady", metav1.ConditionFalse, "Uninstalled"),
+						cond("ProviderCloudfoundryReady", metav1.ConditionTrue, "Uninstalled"),
 						cond("ProviderBtpReady", metav1.ConditionFalse, "Unhealthy"),
 					},
 				},
