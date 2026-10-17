@@ -13,7 +13,7 @@ require (
 	github.com/openmcp-project/controller-utils v0.33.2
 	github.com/openmcp-project/openmcp-operator/api v1.4.2
 	github.com/openmcp-project/openmcp-operator/lib v1.4.2
-	github.com/openmcp-project/openmcp-testing v1.4.1
+	github.com/openmcp-project/openmcp-testing v1.4.2
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/text v0.43.0
@@ -142,10 +142,10 @@ require (
 	github.com/extism/go-sdk v1.7.1 // indirect
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
-	github.com/fluxcd/flux2/v2 v2.9.5 // indirect
+	github.com/fluxcd/flux2/v2 v2.9.6 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.21.0 // indirect
-	github.com/fluxcd/pkg/kustomize v1.35.6 // indirect
+	github.com/fluxcd/pkg/kustomize v1.35.7 // indirect
 	github.com/fluxcd/pkg/tar v1.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fvbommel/sortorder v1.2.0 // indirect
