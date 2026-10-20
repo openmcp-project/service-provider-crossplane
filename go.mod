@@ -9,11 +9,11 @@ require (
 	github.com/fluxcd/pkg/apis/meta v1.32.0
 	github.com/fluxcd/source-controller/api v1.9.6
 	github.com/go-logr/logr v1.4.4
-	github.com/openmcp-project/control-plane-operator v0.5.2
+	github.com/openmcp-project/control-plane-operator v0.5.3
 	github.com/openmcp-project/controller-utils v0.33.2
 	github.com/openmcp-project/openmcp-operator/api v1.4.2
 	github.com/openmcp-project/openmcp-operator/lib v1.4.2
-	github.com/openmcp-project/openmcp-testing v1.4.1
+	github.com/openmcp-project/openmcp-testing v1.4.2
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/text v0.43.0
