@@ -10,7 +10,7 @@ require (
 	github.com/fluxcd/source-controller/api v1.9.6
 	github.com/go-logr/logr v1.4.4
 	github.com/openmcp-project/control-plane-operator v0.5.3
-	github.com/openmcp-project/controller-utils v0.33.2
+	github.com/openmcp-project/controller-utils v0.33.3
 	github.com/openmcp-project/openmcp-operator/api v1.4.2
 	github.com/openmcp-project/openmcp-operator/lib v1.4.2
 	github.com/openmcp-project/openmcp-testing v1.4.2
