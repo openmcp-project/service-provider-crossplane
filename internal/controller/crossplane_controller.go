@@ -212,7 +212,7 @@ func (r *CrossplaneReconciler) doReconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Setup cluster access
-	mcpCluster, result, err := r.setupClusterAccess(ctx, req, xp)
+	mcpCluster, mcpAccessRequest, result, err := r.setupClusterAccess(ctx, req, xp)
 	if err != nil {
 		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonClusterAccessFailed, err.Error())
 		rr.ReconcileError = errutils.WithReason(err, ReasonClusterAccessFailed)
@@ -227,7 +227,7 @@ func (r *CrossplaneReconciler) doReconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Setup Flux kubeconfig
-	ctx, err = r.setupFluxKubeconfig(ctx, req)
+	ctx, err = r.setupFluxKubeconfig(ctx, mcpAccessRequest)
 	if err != nil {
 		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonFluxKubeconfigFailed, err.Error())
 		rr.ReconcileError = errutils.WithReason(err, ReasonFluxKubeconfigFailed)
@@ -358,56 +358,47 @@ func (r *CrossplaneReconciler) setupReconciliationContext(ctx context.Context, r
 	return ctx, nil
 }
 
-func (r *CrossplaneReconciler) setupClusterAccess(ctx context.Context, req ctrl.Request, crossplane *v1alpha1.Crossplane) (*clusters.Cluster, *ctrl.Result, error) {
+func (r *CrossplaneReconciler) setupClusterAccess(ctx context.Context, req ctrl.Request, crossplane *v1alpha1.Crossplane) (*clusters.Cluster, *clustersv1alpha1.AccessRequest, *ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	// Add access finalizer
 	if err := r.ensureFinalizer(ctx, crossplane, FinalizerAccess); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// Remove legacy finalizer
 	if err := r.removeFinalizer(ctx, crossplane, FinalizerLegacy); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Create ClusterRequest/AccessRequest
 	res, err := r.ClusterAccessReconciler.Reconcile(ctx, req)
 	if err != nil {
 		log.Error(err, "failed to reconcile cluster access for crossplane instance")
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// AccessRequest was created but not yet granted
 	if res.RequeueAfter > 0 {
 		result := ctrl.Result{RequeueAfter: res.RequeueAfter}
-		return nil, &result, nil
+		return nil, nil, &result, nil
 	}
 
-	// Get MCPCluster for Crossplane instance
+	// Get MCPCluster and AccessRequest for Crossplane instance
 	mcpCluster, err := r.ClusterAccessReconciler.MCPCluster(ctx, req)
 	if err != nil {
 		log.Error(err, "failed to get MCP cluster for Crossplane instance")
-		result := ctrl.Result{RequeueAfter: 30 * time.Second}
-		return nil, &result, nil
+		return nil, nil, nil, err
+	}
+	ar, err := r.ClusterAccessReconciler.MCPAccessRequest(ctx, req)
+	if err != nil {
+		log.Error(err, "failed to get MCP AccessRequest for Crossplane instance")
+		return nil, nil, nil, err
 	}
 
-	return mcpCluster, nil, nil
+	return mcpCluster, ar, nil, nil
 }
 
-func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, req ctrl.Request) (context.Context, error) {
-	tenantNamespace, err := libutils.StableMCPNamespace(req.Name, req.Namespace)
-	if err != nil {
-		return ctx, fmt.Errorf("failed to determine stable namespace for Crossplane instance: %w", err)
-	}
-
-	// Get MCP AccessRequest to use for Flux
-	mcpAccessRequest := &clustersv1alpha1.AccessRequest{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusteraccess.StableRequestName(clusterAccessReconcilerName, req) + requestSuffixMCP,
-			Namespace: tenantNamespace,
-		},
-	}
-
+func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, mcpAccessRequest *clustersv1alpha1.AccessRequest) (context.Context, error) {
 	if err := r.PlatformCluster.Client().Get(ctx, client.ObjectKeyFromObject(mcpAccessRequest), mcpAccessRequest); err != nil {
 		return ctx, fmt.Errorf("failed to get MCP AccessRequest: %w", err)
 	}
