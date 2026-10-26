@@ -227,12 +227,7 @@ func (r *CrossplaneReconciler) doReconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Setup Flux kubeconfig
-	ctx, err = r.setupFluxKubeconfig(ctx, mcpAccessRequest)
-	if err != nil {
-		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonFluxKubeconfigFailed, err.Error())
-		rr.ReconcileError = errutils.WithReason(err, ReasonFluxKubeconfigFailed)
-		return
-	}
+	ctx = r.setupFluxKubeconfig(ctx, mcpAccessRequest)
 
 	// Pre-reconciliation steps succeeded
 	addCondition(ConditionTypeReconciled, metav1.ConditionTrue, ReasonReconciled, "")
@@ -398,17 +393,13 @@ func (r *CrossplaneReconciler) setupClusterAccess(ctx context.Context, req ctrl.
 	return mcpCluster, ar, nil, nil
 }
 
-func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, mcpAccessRequest *clustersv1alpha1.AccessRequest) (context.Context, error) {
-	if err := r.PlatformCluster.Client().Get(ctx, client.ObjectKeyFromObject(mcpAccessRequest), mcpAccessRequest); err != nil {
-		return ctx, fmt.Errorf("failed to get MCP AccessRequest: %w", err)
-	}
-
+func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, mcpAccessRequest *clustersv1alpha1.AccessRequest) context.Context {
 	secretRef := &corev1.SecretReference{
 		Name:      mcpAccessRequest.Status.SecretRef.Name,
 		Namespace: mcpAccessRequest.Namespace,
 	}
 	ctx = rcontext.WithFluxKubeconfigRef(ctx, secretRef)
-	return ctx, nil
+	return ctx
 }
 
 //nolint:gocyclo
