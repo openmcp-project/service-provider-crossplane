@@ -627,7 +627,7 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 
 	xpHelmChartPullSecret, err := extractHelmChartPullSecretForVersion(xp.Spec.Version, pc.Spec.CrossplaneVersions)
 	if err != nil && enabled {
-		return nil, fmt.Errorf("failed to extract Crossplane Helm chart pull secret for version %s: %w", xp.Spec.Version, err)
+		return nil, err
 	}
 	xpContainerImagePullSecrets := discoverCrossplaneImagePullSecrets(xp.Spec, pc.Spec.CrossplaneVersions)
 
@@ -894,7 +894,7 @@ func extractHelmChartPullSecretForVersion(targetVersion string, xpversions []v1a
 	for _, v := range xpversions {
 		available = append(available, v.Version)
 	}
-	return nil, fmt.Errorf("%w: requested version %q is not available, available versions: %v", errutils.ErrInvalidUserInput, targetVersion, available)
+	return nil, fmt.Errorf("%w: requested version %q is not available, set spec.version to one of: %v", errutils.ErrInvalidUserInput, targetVersion, available)
 }
 
 func discoverCrossplaneImagePullSecrets(spec v1alpha1.CrossplaneSpec, xpversions []v1alpha1.CrossplaneVersion) []commonapi.LocalObjectReference {
