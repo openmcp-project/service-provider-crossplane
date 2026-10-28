@@ -6,7 +6,7 @@ package v1alpha1
 
 import (
 	"github.com/openmcp-project/openmcp-operator/api/common"
-	v1 "k8s.io/api/core/v1"
+	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
