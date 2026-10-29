@@ -1,6 +1,6 @@
 module github.com/openmcp-project/service-provider-crossplane
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/crossplane/crossplane/apis/v2 v2.4.3
