@@ -1114,11 +1114,13 @@ func Test_GetResolverFunc(t *testing.T) {
 			Providers: v1alpha1.CrossplaneProviders{
 				AvailableProviders: []v1alpha1.AvailableCrossplaneProvider{
 					{Name: "provider-aws", Versions: []string{"v0.1.0"}, Package: "crossplane/provider-aws"},
+					{Name: "provider-btp", Versions: []string{"0.1.0"}, Package: "crossplane/provider-btp"},
 				},
 			},
 			Functions: v1alpha1.CrossplaneFunctions{
 				AvailableFunctions: []v1alpha1.AvailableCrossplaneFunction{
 					{Name: "function-patch-and-transform", Versions: []string{"v0.8.0"}, Package: "xpkg.upbound.io/crossplane-contrib/function-patch-and-transform"},
+					{Name: "function-auto-ready", Versions: []string{"0.8.0"}, Package: "xpkg.upbound.io/crossplane-contrib/function-patch-and-transform"},
 				},
 			},
 		},
@@ -1134,9 +1136,15 @@ func Test_GetResolverFunc(t *testing.T) {
 	}{
 		{"valid crossplane version", component.CrossplaneRelease, "v1.0.0", false},
 		{"unsupported crossplane version", component.CrossplaneRelease, "v9.9.9", true},
-		{"valid provider version", "provider-aws", "v0.1.0", false},
+		{"provider version with v, available version with v", "provider-aws", "v0.1.0", false},
+		{"provider version without v, available version with v", "provider-aws", "0.1.0", false},
+		{"provider version with v, available version without v", "provider-btp", "v0.1.0", false},
+		{"provider version without v, available version without v", "provider-btp", "0.1.0", false},
 		{"unsupported provider version", "provider-aws", "v9.9.9", true},
-		{"valid function version", "function-patch-and-transform", "v0.8.0", false},
+		{"function version with v, available version with v", "function-patch-and-transform", "v0.8.0", false},
+		{"function version without v, available version with v", "function-patch-and-transform", "0.8.0", false},
+		{"function version with v, available version without v", "function-auto-ready", "v0.8.0", false},
+		{"function version without v, available version without v", "function-auto-ready", "0.8.0", false},
 		{"unsupported function version", "function-patch-and-transform", "v9.9.9", true},
 		{"unknown function", "function-unknown", "v0.1.0", true},
 		{"unknown component", "unknown-component", "v0.1.0", true},

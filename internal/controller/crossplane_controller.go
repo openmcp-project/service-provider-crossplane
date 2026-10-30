@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -1043,6 +1043,11 @@ func getMCPRoleRefs() []commonapi.RoleRef {
 	}
 }
 
+// normalizeVersion strips a leading v from a version string.
+func normalizeVersion(version string) string {
+	return strings.TrimPrefix(version, "v")
+}
+
 // GetResolverFunc is used to verify if the Crossplane instance configuration with its providers and functions is valid.
 // It checks the name and versions against the configured v1alpha1.ProviderConfig on the Platform cluster.
 // The function returns a v1beta1.VersionResolverFn that can be used to resolve the versions later in the reconcile loop.
@@ -1076,11 +1081,13 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 		var availableVersions []string
 		for _, provider := range providerConfig.Spec.Providers.AvailableProviders {
 			if componentName == provider.Name {
-				if slices.Contains(provider.Versions, version) {
-					return v1beta1.ComponentVersion{
-						DockerRef: provider.Package + ":" + version, // format: <image-location>:<version>
-						Version:   version,
-					}, nil
+				for _, configuredVersion := range provider.Versions {
+					if normalizeVersion(configuredVersion) == normalizeVersion(version) {
+						return v1beta1.ComponentVersion{
+							DockerRef: provider.Package + ":" + configuredVersion, // format: <image-location>:<version>
+							Version:   configuredVersion,
+						}, nil
+					}
 				}
 				availableVersions = append(availableVersions, provider.Versions...)
 			}
@@ -1093,11 +1100,13 @@ func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.Provider
 		var availableFunctionVersions []string
 		for _, function := range providerConfig.Spec.Functions.AvailableFunctions {
 			if componentName == function.Name {
-				if slices.Contains(function.Versions, version) {
-					return v1beta1.ComponentVersion{
-						DockerRef: function.Package + ":" + version, // format: <image-location>:<version>
-						Version:   version,
-					}, nil
+				for _, configuredVersion := range function.Versions {
+					if normalizeVersion(configuredVersion) == normalizeVersion(version) {
+						return v1beta1.ComponentVersion{
+							DockerRef: function.Package + ":" + configuredVersion, // format: <image-location>:<version>
+							Version:   configuredVersion,
+						}, nil
+					}
 				}
 				availableFunctionVersions = append(availableFunctionVersions, function.Versions...)
 			}
