@@ -4,10 +4,10 @@ go 1.27.3
 
 require (
 	github.com/crossplane/crossplane/apis/v2 v2.4.3
-	github.com/fluxcd/helm-controller/api v1.6.5
+	github.com/fluxcd/helm-controller/api v1.7.1
 	github.com/fluxcd/kustomize-controller/api v1.10.1
 	github.com/fluxcd/pkg/apis/meta v1.38.0
-	github.com/fluxcd/source-controller/api v1.9.6
+	github.com/fluxcd/source-controller/api v1.10.0
 	github.com/go-logr/logr v1.4.4
 	github.com/openmcp-project/control-plane-operator v0.5.5
 	github.com/openmcp-project/controller-utils v0.33.3
@@ -143,7 +143,7 @@ require (
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fluxcd/flux2/v2 v2.9.6 // indirect
-	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
+	github.com/fluxcd/pkg/apis/acl v0.12.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.23.0 // indirect
 	github.com/fluxcd/pkg/kustomize v1.35.7 // indirect
 	github.com/fluxcd/pkg/tar v1.2.0 // indirect
