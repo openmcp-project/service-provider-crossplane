@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ocmv1alpha1 "ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 
 	"github.com/openmcp-project/service-provider-crossplane/api/v1alpha1"
 )
@@ -39,6 +40,9 @@ func initPlatform() {
 	utilruntime.Must(helmv2.AddToScheme(Platform))
 	utilruntime.Must(kustomizev1.AddToScheme(Platform))
 	utilruntime.Must(sourcev1.AddToScheme(Platform))
+
+	// OCM
+	utilruntime.Must(ocmv1alpha1.AddToScheme(Platform))
 }
 
 // initOnboarding registers the onboarding schemes.

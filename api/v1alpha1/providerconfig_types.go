@@ -17,115 +17,65 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"github.com/openmcp-project/extensibility-utils/pkg/discovery"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	ocmv1alpha1 "ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 )
 
-// AvailableCrossplaneProvider represents configuration for Crossplane providers in a ProviderConfig of the Service Provider Crossplane.
-type AvailableCrossplaneProvider struct {
-	// Name of the provider.
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
+const (
+	DiscoveryIDCrossplane = "crossplane"
+	DiscoveryIDProviders  = "providers"
+	DiscoveryIDFunctions  = "functions"
+)
 
-	// Version of the provider to install.
-	// +kubebuilder:validation:Required
-	Versions []string `json:"versions"`
-
-	// Package is the package name of the provider.
-	// +kubebuilder:validation:Required
-	Package string `json:"package"`
-}
-
-// CrossplaneProviders represents the configutation of Crossplane providers and and their image pull secrets.
-type CrossplaneProviders struct {
-	// AvailableProviders holds the list of providers that can be configured with the Service Provider Crossplane.
-	// +kubebuilder:validation:Required
-	AvailableProviders []AvailableCrossplaneProvider `json:"availableProviders"`
-
-	// Image pull secrets for pulling Crossplane provider images from private OCI registries.
+type CrossplaneConfig struct {
 	// +kubebuilder:validation:Optional
-	ImagePullSecrets []commonapi.LocalObjectReference `json:"imagePullSecretRefs,omitempty"`
-}
-
-// ChartSpec defines the location and access of a Helm chart.
-type ChartSpec struct {
-	// URL is a reference to an OCI artifact repository hosted on a remote container registry where the Helm chart is stored.
-	// The URL must NOT start with "oci://".
-	// +kubebuilder:validation:Required
-	URL string `json:"url"`
-
-	// SecretRef references a secret containing credentials to access the OCI artifact repository.
+	ResourceLabel string `json:"resourceLabel,omitempty"`
 	// +kubebuilder:validation:Optional
-	SecretRef commonapi.LocalObjectReference `json:"secretRef,omitempty"`
-}
-
-// ImageSpec defines the location and access a container image.
-type ImageSpec struct {
-	// URL is a reference to the container image location.
-	// +kubebuilder:validation:Required
-	URL string `json:"url"`
-
-	// SecretRef references a secret containing credentials to access the container image repository.
+	Chart string `json:"chart,omitempty"`
 	// +kubebuilder:validation:Optional
-	SecretRef commonapi.LocalObjectReference `json:"secretRef,omitempty"`
-}
-
-// CrossplaneVersion defines a specific version of Crossplane along with its chart and image information.
-type CrossplaneVersion struct {
-	// Version of Crossplane.
-	// +kubebuilder:validation:Required
-	Version string `json:"version"`
-
-	// Chart holds the Helm chart information for this Crossplane version.
-	// +kubebuilder:validation:Required
-	Chart ChartSpec `json:"chart"`
-
-	// Image holds the Crossplane controller image information for this Crossplane version.
-	// If not specified, the default image configured in the Helm chart will be used.
+	Image string `json:"image,omitempty"`
 	// +kubebuilder:validation:Optional
-	Image *ImageSpec `json:"image,omitempty"`
-}
-
-// AvailableCrossplaneFunction represents configuration for Crossplane functions in a ProviderConfig of the Service Provider Crossplane.
-type AvailableCrossplaneFunction struct {
-	// Name of the function.
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-
-	// Versions of the function that are available for installation.
-	// +kubebuilder:validation:Required
-	Versions []string `json:"versions"`
-
-	// Package is the package name of the function.
-	// +kubebuilder:validation:Required
-	Package string `json:"package"`
-}
-
-// CrossplaneFunctions represents the configuration of Crossplane functions and their image pull secrets.
-type CrossplaneFunctions struct {
-	// AvailableFunctions holds the list of functions that can be configured with the Service Provider Crossplane.
-	// +kubebuilder:validation:Required
-	AvailableFunctions []AvailableCrossplaneFunction `json:"availableFunctions"`
-
-	// Image pull secrets for pulling Crossplane function images from private OCI registries.
-	// If not specified, the image pull secrets from the providers section will be used as a fallback.
+	ComponentSelector *ocmv1alpha1.Selector `json:"componentSelector,omitempty"`
 	// +kubebuilder:validation:Optional
-	ImagePullSecrets []commonapi.LocalObjectReference `json:"imagePullSecretRefs,omitempty"`
+	ResourceSelector *ocmv1alpha1.Selector `json:"resourceSelector,omitempty"`
+}
+
+type DiscoveredProvidersConfig struct {
+	// +kubebuilder:validation:Optional
+	ResourceLabel string `json:"resourceLabel,omitempty"`
+	// +kubebuilder:validation:Optional
+	Image string `json:"image,omitempty"`
+	// +kubebuilder:validation:Optional
+	ComponentSelector *ocmv1alpha1.Selector `json:"componentSelector,omitempty"`
+	// +kubebuilder:validation:Optional
+	ResourceSelector *ocmv1alpha1.Selector `json:"resourceSelector,omitempty"`
+}
+
+type DiscoveredFunctionsConfig struct {
+	// +kubebuilder:validation:Optional
+	ResourceLabel string `json:"resourceLabel,omitempty"`
+	// +kubebuilder:validation:Optional
+	Image string `json:"image,omitempty"`
+	// +kubebuilder:validation:Optional
+	ComponentSelector *ocmv1alpha1.Selector `json:"componentSelector,omitempty"`
+	// +kubebuilder:validation:Optional
+	ResourceSelector *ocmv1alpha1.Selector `json:"resourceSelector,omitempty"`
 }
 
 // ProviderConfigSpec defines the desired state of ProviderConfig.
 type ProviderConfigSpec struct {
-	CrossplaneVersions []CrossplaneVersion `json:"versions"`
-
-	// Providers holds the configuration for Crossplane providers that can be installed via the Service Provider Crossplane.
 	// +kubebuilder:validation:Optional
-	Providers CrossplaneProviders `json:"providers,omitempty"`
-
-	// Functions holds the configuration for Crossplane functions that can be installed via the Service Provider Crossplane.
+	Crossplane CrossplaneConfig `json:"crossplane,omitempty"`
 	// +kubebuilder:validation:Optional
-	Functions CrossplaneFunctions `json:"functions,omitempty"`
+	Providers DiscoveredProvidersConfig `json:"providers,omitempty"`
+	// +kubebuilder:validation:Optional
+	Functions DiscoveredFunctionsConfig `json:"functions,omitempty"`
+	// +kubebuilder:validation:Optional
+	Releasechannel string `json:"releasechannel,omitempty"`
 
 	// CABundleRef is a reference to a config map containing certificate bundle.
 	// It will be installed on the ManagedControlPlane and configured for Crossplane runtime and providers.
@@ -174,4 +124,68 @@ func init() {
 		s.AddKnownTypes(GroupVersion, &ProviderConfig{}, &ProviderConfigList{})
 		return nil
 	})
+}
+
+func (p *ProviderConfig) DiscoveryConfigs() []discovery.DiscoveryConfig {
+	return []discovery.DiscoveryConfig{p.crossplaneDiscovery(), p.providersDiscovery(), p.functionsDiscovery()}
+}
+
+func (p *ProviderConfig) crossplaneDiscovery() discovery.DiscoveryConfig {
+	componentSelector := p.Spec.Crossplane.ComponentSelector
+	if componentSelector == nil {
+		componentSelector = &ocmv1alpha1.Selector{
+			MatchLabels: map[string]string{"crossplane.services.open-control-plane.io/component": "crossplane"},
+		}
+	}
+	releasechannel := "releasechannel"
+	if p.Spec.Releasechannel != "" {
+		releasechannel = p.Spec.Releasechannel
+	}
+
+	return discovery.DiscoveryConfig{
+		ID:                DiscoveryIDCrossplane,
+		ComponentSelector: componentSelector,
+		ResourceSelector:  p.Spec.Crossplane.ResourceSelector,
+		Releasechannel:    releasechannel,
+	}
+}
+
+func (p *ProviderConfig) providersDiscovery() discovery.DiscoveryConfig {
+	componentSelector := p.Spec.Providers.ComponentSelector
+	if componentSelector == nil {
+		componentSelector = &ocmv1alpha1.Selector{
+			MatchLabels: map[string]string{"crossplane.services.open-control-plane.io/component": "crossplane-provider"},
+		}
+	}
+	releasechannel := "releasechannel"
+	if p.Spec.Releasechannel != "" {
+		releasechannel = p.Spec.Releasechannel
+	}
+
+	return discovery.DiscoveryConfig{
+		ID:                DiscoveryIDProviders,
+		ComponentSelector: componentSelector,
+		ResourceSelector:  p.Spec.Providers.ResourceSelector,
+		Releasechannel:    releasechannel,
+	}
+}
+
+func (p *ProviderConfig) functionsDiscovery() discovery.DiscoveryConfig {
+	componentSelector := p.Spec.Functions.ComponentSelector
+	if componentSelector == nil {
+		componentSelector = &ocmv1alpha1.Selector{
+			MatchLabels: map[string]string{"crossplane.services.open-control-plane.io/component": "crossplane-function"},
+		}
+	}
+	releasechannel := "releasechannel"
+	if p.Spec.Releasechannel != "" {
+		releasechannel = p.Spec.Releasechannel
+	}
+
+	return discovery.DiscoveryConfig{
+		ID:                DiscoveryIDFunctions,
+		ComponentSelector: componentSelector,
+		ResourceSelector:  p.Spec.Functions.ResourceSelector,
+		Releasechannel:    releasechannel,
+	}
 }

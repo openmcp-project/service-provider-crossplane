@@ -70,7 +70,10 @@ func (c *Crossplane) IsInstallable(ctx context.Context) (bool, error) {
 func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAdapter, error) {
 	rfn := rcontext.VersionResolver(ctx)
 
-	comp, _ := rfn(CrossplaneRelease, c.Config.Version)
+	comp, err := rfn(CrossplaneRelease, c.Config.Version)
+	if err != nil {
+		return nil, err
+	}
 
 	url, tag, _, err := image.ParseImage(comp.OCIURL)
 	if err != nil {
@@ -158,7 +161,10 @@ func (c *Crossplane) applyDefaultValues(rfn v1beta1.VersionResolverFn) error {
 		return nil
 	}
 
-	comp, _ := rfn(CrossplaneRelease, c.Config.Version)
+	comp, err := rfn(CrossplaneRelease, c.Config.Version)
+	if err != nil {
+		return err
+	}
 
 	// Read user-provided values
 	values := map[string]any{}
