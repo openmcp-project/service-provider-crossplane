@@ -139,7 +139,7 @@ spec:
 ### Skip reconciliation of a managed resource
 
 To temporarily take manual control of a resource managed by this Service Provider, add the annotation
-`core.orchestrate.cloud.sap/skip-reconciliation: "true"` to that resource.
+`open-control-plane.io/skip-reconciliation: "true"` to that resource.
 
 While the annotation is present, the reconciler leaves the resource untouched. That means neither desired-state changes
 nor nor drift from the expected state will be applied granting manual control over the resource so manual changes are preserved.
@@ -156,7 +156,7 @@ The Crossplane instance itself is reconciled via Flux and is not affected by thi
 
 ```bash
 # Pause reconciliation of a provider
-kubectl annotate provider provider-btp core.orchestrate.cloud.sap/skip-reconciliation=true
+kubectl annotate provider provider-btp open-control-plane.io/skip-reconciliation=true
 ```
 
 ## 📚 Documentation
