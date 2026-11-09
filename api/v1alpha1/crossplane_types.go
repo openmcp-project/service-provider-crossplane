@@ -70,6 +70,7 @@ type CrossplaneStatus struct {
 // +kubebuilder:printcolumn:JSONPath=`.status.phase`,name="Phase",type=string
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:metadata:labels="openmcp.cloud/cluster=onboarding"
+// +kubebuilder:metadata:labels="services.open-control-plane.io/kind=Crossplane"
 type Crossplane struct {
 	metav1.TypeMeta `json:",inline"`
 
