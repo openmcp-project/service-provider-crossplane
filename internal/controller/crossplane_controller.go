@@ -18,10 +18,11 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"strings"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -30,6 +31,7 @@ import (
 	ctrlutils "github.com/openmcp-project/controller-utils/pkg/controller"
 	"github.com/openmcp-project/controller-utils/pkg/controller/smartrequeue"
 	errutils "github.com/openmcp-project/controller-utils/pkg/errors"
+	"github.com/openmcp-project/extensibility-utils/pkg/discovery"
 	openmcpconsts "github.com/openmcp-project/openmcp-operator/api/constants"
 	corev1 "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1"
@@ -90,6 +92,7 @@ var (
 const (
 	requestSuffixMCP = "--mcp"
 	secretNamePrefix = "sp-crossplane-"
+	resourceLabel    = "crossplane.services.open-control-plane.io/resource"
 )
 
 // CrossplaneReconciler reconciles a Crossplane object
@@ -195,8 +198,32 @@ func (r *CrossplaneReconciler) doReconcile(ctx context.Context, req ctrl.Request
 		return
 	}
 
+	discoveryConfigs := pc.DiscoveryConfigs()
+	cfg := discovery.Config{Namespace: "openmcp-system", ServiceProvider: "crossplane", Releasechannel: "releasechannel", DiscoveryConfigs: discoveryConfigs}
+
+	resolver, err := discovery.NewResolver(ctx, cfg, r.PlatformCluster)
+	if err != nil {
+		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonDiscoveryResolverFailed, fmt.Sprintf("Creating discovery resolver failed: %s", err))
+		rr.ReconcileError = errutils.WithReason(err, ReasonApplyDiscoveryFailed)
+		r.Recorder.Eventf(xp, nil, corev1.EventTypeWarning, ReasonApplyDiscoveryFailed, "Reconcile", "Creating discovery resolver failed: %s", err)
+		return
+	}
+	requeue, err := resolver.Apply(ctx)
+	if err != nil {
+		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonApplyDiscoveryFailed, fmt.Sprintf("Discovery resources could not be applied: %s", err))
+		rr.ReconcileError = errutils.WithReason(err, ReasonApplyDiscoveryFailed)
+		r.Recorder.Eventf(xp, nil, corev1.EventTypeWarning, ReasonApplyDiscoveryFailed, "Reconcile", "Discovery resources could not be applied: %s", err)
+		return
+	}
+
+	if requeue {
+		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonDiscoveryNotReady, "Discovery resources not ready")
+		rr.SmartRequeue = ctrlutils.SR_RESET
+		return
+	}
+
 	// Setup reconciliation context
-	ctx, err := r.setupReconciliationContext(ctx, req, pc)
+	ctx, err = r.setupReconciliationContext(ctx, req, resolver, pc)
 	if err != nil {
 		addCondition(ConditionTypeReconciled, metav1.ConditionFalse, ReasonReconciliationContextFailed, err.Error())
 		rr.ReconcileError = errutils.WithReason(err, ReasonReconciliationContextFailed)
@@ -233,12 +260,12 @@ func (r *CrossplaneReconciler) doReconcile(ctx context.Context, req ctrl.Request
 	addCondition(ConditionTypeReconciled, metav1.ConditionTrue, ReasonReconciled, "")
 
 	// Reconcile components
-	r.doReconcileComponents(ctx, mcpCluster.Client(), xp, pc, rr)
+	r.doReconcileComponents(ctx, mcpCluster.Client(), xp, pc, resolver, rr)
 }
 
-func (r *CrossplaneReconciler) doReconcileComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig, rr *ctrlutils.ReconcileResult[*v1alpha1.Crossplane]) {
+func (r *CrossplaneReconciler) doReconcileComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig, resolver discovery.Resolver, rr *ctrlutils.ReconcileResult[*v1alpha1.Crossplane]) {
 	if inDeletion(xp) {
-		r.doDeleteComponents(ctx, mcpClient, xp, pc, rr)
+		r.doDeleteComponents(ctx, mcpClient, xp, pc, resolver, rr)
 		return
 	}
 
@@ -253,7 +280,7 @@ func (r *CrossplaneReconciler) doReconcileComponents(ctx context.Context, mcpCli
 		return
 	}
 
-	componentConditions, err := r.createOrUpdateCrossplaneInstance(ctx, mcpClient, xp, pc)
+	componentConditions, err := r.createOrUpdateCrossplaneInstance(ctx, resolver, mcpClient, xp, pc)
 	if err != nil {
 		rr.ReconcileError = errutils.WithReason(errutils.IgnoreInvalidUserInput(err), ReasonComponentReconcileFailed)
 		rr.Conditions = overrideCondition(rr.Conditions, ConditionTypeReconciled, metav1.ConditionFalse, ReasonComponentBuildFailed, err.Error())
@@ -281,7 +308,7 @@ func (r *CrossplaneReconciler) doReconcileComponents(ctx context.Context, mcpCli
 	rr.SmartRequeue = ctrlutils.SR_BACKOFF
 }
 
-func (r *CrossplaneReconciler) doDeleteComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig, rr *ctrlutils.ReconcileResult[*v1alpha1.Crossplane]) {
+func (r *CrossplaneReconciler) doDeleteComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig, resolver discovery.Resolver, rr *ctrlutils.ReconcileResult[*v1alpha1.Crossplane]) {
 	log := log.FromContext(ctx)
 
 	if !r.hasFinalizer(xp, FinalizerComponents) {
@@ -289,7 +316,7 @@ func (r *CrossplaneReconciler) doDeleteComponents(ctx context.Context, mcpClient
 		return
 	}
 
-	componentConditions, err := r.deleteControlPlaneComponents(ctx, mcpClient, xp, pc)
+	componentConditions, err := r.deleteControlPlaneComponents(ctx, mcpClient, xp, pc, resolver)
 	rr.Conditions = append(rr.Conditions, componentConditions...)
 
 	if errors.Is(err, errComponentRemaining) {
@@ -338,9 +365,8 @@ func (r *CrossplaneReconciler) doCleanupClusterAccess(ctx context.Context, req c
 	}
 }
 
-func (r *CrossplaneReconciler) setupReconciliationContext(ctx context.Context, req ctrl.Request, providerConfig *v1alpha1.ProviderConfig) (context.Context, error) {
-	// Handle ProviderConfig as ReleaseChannel
-	resolverFn := r.GetResolverFunc(providerConfig)
+func (r *CrossplaneReconciler) setupReconciliationContext(ctx context.Context, req ctrl.Request, resolver discovery.Resolver, providerConfig *v1alpha1.ProviderConfig) (context.Context, error) {
+	resolverFn := r.GetResolverFunc(ctx, resolver, providerConfig)
 	ctx = rcontext.WithVersionResolver(ctx, resolverFn)
 
 	// ensure namespace on platform cluster
@@ -403,11 +429,11 @@ func (r *CrossplaneReconciler) setupFluxKubeconfig(ctx context.Context, mcpAcces
 }
 
 //nolint:gocyclo
-func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
+func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig, resolver discovery.Resolver) ([]metav1.Condition, error) {
 	// Use a tolerant version resolver during deletion: if a version is unknown,
 	// return a placeholder so that components can still build their resource objects
 	// (the Juggler identifies resources by name, not by URL content).
-	ctx = rcontext.WithVersionResolver(ctx, tolerantResolverFunc(r.GetResolverFunc(pc)))
+	ctx = rcontext.WithVersionResolver(ctx, tolerantResolverFunc(r.GetResolverFunc(ctx, resolver, pc)))
 
 	// Phase 1: Delete providers and functions while Crossplane is still running.
 	// Crossplane must be running to process Provider/Function finalizers; its PreUninstall
@@ -437,7 +463,7 @@ func (r *CrossplaneReconciler) deleteControlPlaneComponents(ctx context.Context,
 	}
 
 	// Phase 2: All providers and functions are gone — delete everything else (Crossplane, secrets, DRC).
-	comps, err := buildComponents(ctx, r.PlatformCluster.Client(), xp, pc, false)
+	comps, err := buildComponents(ctx, resolver, r.PlatformCluster.Client(), xp, pc, false)
 	if err != nil {
 		return nil, errors.Join(errors.New("failed to build components for Crossplane instance"), err)
 	}
@@ -511,12 +537,12 @@ func hasFunctionRevisions(ctx context.Context, mcpClient client.Client) (bool, e
 
 func buildProviderComponents(xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) []juggler.Component {
 	comps := make([]juggler.Component, 0, len(xp.Spec.Providers))
-	pullSecrets := convertImagePullSecrets(pc.Spec.Providers.ImagePullSecrets)
+	// pullSecrets := convertImagePullSecrets(pc.Spec.Providers.ImagePullSecrets)
 	for _, provider := range xp.Spec.Providers {
 		comps = append(comps, &component.CrossplaneProvider{
-			Config:      provider,
-			Enabled:     false,
-			PullSecrets: pullSecrets,
+			Config:  provider,
+			Enabled: false,
+			// PullSecrets: pullSecrets,
 		})
 	}
 	return comps
@@ -524,12 +550,12 @@ func buildProviderComponents(xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfi
 
 func buildFunctionComponents(xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) []juggler.Component {
 	comps := make([]juggler.Component, 0, len(xp.Spec.Functions))
-	pullSecrets := convertImagePullSecrets(functionImagePullSecrets(pc))
+	// pullSecrets := convertImagePullSecrets(functionImagePullSecrets(pc))
 	for _, function := range xp.Spec.Functions {
 		comps = append(comps, &component.CrossplaneFunction{
-			Config:      function,
-			Enabled:     false,
-			PullSecrets: pullSecrets,
+			Config:  function,
+			Enabled: false,
+			// PullSecrets: pullSecrets,
 		})
 	}
 	return comps
@@ -538,15 +564,15 @@ func buildFunctionComponents(xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfi
 // functionImagePullSecrets returns the image pull secrets for functions.
 // If the functions section has its own secrets, those are used.
 // Otherwise, the provider image pull secrets are used as a fallback.
-func functionImagePullSecrets(pc *v1alpha1.ProviderConfig) []commonapi.LocalObjectReference {
-	if len(pc.Spec.Functions.ImagePullSecrets) > 0 {
-		return pc.Spec.Functions.ImagePullSecrets
-	}
-	return pc.Spec.Providers.ImagePullSecrets
-}
+// func functionImagePullSecrets(pc *v1alpha1.ProviderConfig) []commonapi.LocalObjectReference {
+// 	if len(pc.Spec.Functions.ImagePullSecrets) > 0 {
+// 		return pc.Spec.Functions.ImagePullSecrets
+// 	}
+// 	return pc.Spec.Providers.ImagePullSecrets
+// }
 
-func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Context, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
-	comps, err := buildComponents(ctx, r.PlatformCluster.Client(), xp, pc, true)
+func (r *CrossplaneReconciler) createOrUpdateCrossplaneInstance(ctx context.Context, resolver discovery.Resolver, mcpClient client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig) ([]metav1.Condition, error) {
+	comps, err := buildComponents(ctx, resolver, r.PlatformCluster.Client(), xp, pc, true)
 	if err != nil {
 		return nil, errors.Join(errors.New("failed to build components for Crossplane instance"), err)
 	}
@@ -599,20 +625,25 @@ func (r *CrossplaneReconciler) newJuggler(ctx context.Context, mcpClient client.
 // buildComponents builds the components for the Crossplane instance based on its spec and the ProviderConfig.
 //
 //nolint:gocyclo
-func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig, enabled bool) ([]juggler.Component, error) {
+func buildComponents(ctx context.Context, resolver discovery.Resolver, client client.Client, xp *v1alpha1.Crossplane, pc *v1alpha1.ProviderConfig, enabled bool) ([]juggler.Component, error) {
 	comps := make([]juggler.Component, 0)
 
 	podNs := os.Getenv(openmcpconsts.EnvVariablePodNamespace)
 	if podNs == "" {
 		return nil, fmt.Errorf("environment variable %s not set - cannot determine source namespace for secrets", openmcpconsts.EnvVariablePodNamespace)
 	}
-
-	xpHelmChartPullSecret, err := extractHelmChartPullSecretForVersion(xp.Spec.Version, pc.Spec.CrossplaneVersions)
-	if err != nil && enabled {
-		return nil, err
+	credRef, err := resolver.Credentials(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch credentials: %w", err)
 	}
-	xpContainerImagePullSecrets := discoverCrossplaneImagePullSecrets(xp.Spec, pc.Spec.CrossplaneVersions)
 
+	var xpHelmChartPullSecret *commonapi.LocalObjectReference
+	var xpContainerImagePullSecrets []commonapi.LocalObjectReference
+	if credRef != nil {
+		ref := commonapi.LocalObjectReference(*credRef)
+		xpHelmChartPullSecret = &ref
+		xpContainerImagePullSecrets = []commonapi.LocalObjectReference{ref}
+	}
 	prefixedChartPullSecret, err := prefixChartPullSecretName(xpHelmChartPullSecret)
 	if err != nil {
 		return nil, err
@@ -648,11 +679,7 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 	comps = append(comps, defaultDRC)
 
 	if xp.Spec.Providers != nil {
-		if len(pc.Spec.Providers.AvailableProviders) == 0 {
-			return nil, errors.New("providers are specified in Crossplane instance but no available providers configured in ProviderConfig")
-		}
-
-		pullSecrets := convertImagePullSecrets(pc.Spec.Providers.ImagePullSecrets)
+		providerPullSecrets := convertImagePullSecrets(xpContainerImagePullSecrets)
 		for _, provider := range xp.Spec.Providers {
 			drc := &component.DeploymentRuntimeConfig{
 				Enabled: xpComp.IsEnabled(),
@@ -669,17 +696,13 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 			comps = append(comps, drc, &component.CrossplaneProvider{
 				Config:      provider,
 				Enabled:     xpComp.IsEnabled(),
-				PullSecrets: pullSecrets,
+				PullSecrets: providerPullSecrets,
 			})
 		}
 	}
 
 	if xp.Spec.Functions != nil {
-		if len(pc.Spec.Functions.AvailableFunctions) == 0 {
-			return nil, errors.New("functions are specified in Crossplane instance but no available functions configured in ProviderConfig")
-		}
-
-		pullSecrets := convertImagePullSecrets(functionImagePullSecrets(pc))
+		functionPullSecrets := convertImagePullSecrets(xpContainerImagePullSecrets)
 		for _, function := range xp.Spec.Functions {
 			drc := &component.DeploymentRuntimeConfig{
 				Enabled: xpComp.IsEnabled(),
@@ -696,7 +719,7 @@ func buildComponents(ctx context.Context, client client.Client, xp *v1alpha1.Cro
 			comps = append(comps, drc, &component.CrossplaneFunction{
 				Config:      function,
 				Enabled:     xpComp.IsEnabled(),
-				PullSecrets: pullSecrets,
+				PullSecrets: functionPullSecrets,
 			})
 		}
 	}
@@ -717,8 +740,6 @@ func prefixChartPullSecretName(ref *commonapi.LocalObjectReference) (string, err
 func buildAllSecretComponents(ctx context.Context, cl client.Client, enabled bool, chartPullSecret *commonapi.LocalObjectReference, prefixedChartPullSecret string, imagePullSecrets []commonapi.LocalObjectReference, podNs string, pc *v1alpha1.ProviderConfig) ([]juggler.Component, error) {
 	comps := make([]juggler.Component, 0)
 	comps = appendDistinct(comps, buildSecretsComponents(cl, imagePullSecrets, podNs, component.CrossplaneNamespace, enabled)...)
-	comps = appendDistinct(comps, buildSecretsComponents(cl, pc.Spec.Providers.ImagePullSecrets, podNs, component.CrossplaneNamespace, enabled)...)
-	comps = appendDistinct(comps, buildSecretsComponents(cl, functionImagePullSecrets(pc), podNs, component.CrossplaneNamespace, enabled)...)
 
 	if chartPullSecret != nil && chartPullSecret.Name != "" {
 		comps = append(comps, &component.PlatformSecret{
@@ -866,28 +887,28 @@ func deduplicateSecretRefs(secrets []commonapi.LocalObjectReference) []commonapi
 	return result
 }
 
-func extractHelmChartPullSecretForVersion(targetVersion string, xpversions []v1alpha1.CrossplaneVersion) (*commonapi.LocalObjectReference, error) {
-	for _, v := range xpversions {
-		if targetVersion == v.Version {
-			return &v.Chart.SecretRef, nil
-		}
-	}
-	available := make([]string, 0, len(xpversions))
-	for _, v := range xpversions {
-		available = append(available, v.Version)
-	}
-	return nil, fmt.Errorf("%w: requested version %q is not available, set spec.version to one of: %v", errutils.ErrInvalidUserInput, targetVersion, available)
-}
+// func extractHelmChartPullSecretForVersion(targetVersion string, xpversions []v1alpha1.CrossplaneVersion) (*commonapi.LocalObjectReference, error) {
+// 	for _, v := range xpversions {
+// 		if targetVersion == v.Version {
+// 			return &v.Chart.SecretRef, nil
+// 		}
+// 	}
+// 	available := make([]string, 0, len(xpversions))
+// 	for _, v := range xpversions {
+// 		available = append(available, v.Version)
+// 	}
+// 	return nil, fmt.Errorf("%w: requested version %q is not available, available versions: %v", errutils.ErrInvalidUserInput, targetVersion, available)
+// }
 
-func discoverCrossplaneImagePullSecrets(spec v1alpha1.CrossplaneSpec, xpversions []v1alpha1.CrossplaneVersion) []commonapi.LocalObjectReference {
-	secrets := make([]commonapi.LocalObjectReference, 0, len(xpversions))
-	for _, v := range xpversions {
-		if spec.Version == v.Version && v.Image != nil {
-			secrets = append(secrets, v.Image.SecretRef)
-		}
-	}
-	return deduplicateSecretRefs(secrets)
-}
+// func discoverCrossplaneImagePullSecrets(spec v1alpha1.CrossplaneSpec, xpversions []v1alpha1.CrossplaneVersion) []commonapi.LocalObjectReference {
+// 	secrets := make([]commonapi.LocalObjectReference, 0, len(xpversions))
+// 	for _, v := range xpversions {
+// 		if spec.Version == v.Version && v.Image != nil {
+// 			secrets = append(secrets, v.Image.SecretRef)
+// 		}
+// 	}
+// 	return deduplicateSecretRefs(secrets)
+// }
 
 func (r *CrossplaneReconciler) registerReconcilers(juggler *juggler.Juggler, logger logr.Logger, mcpClient client.Client) {
 	fr := fluxcd.NewFluxReconciler(logger, r.PlatformCluster.Client(), mcpClient, sputils.LabelComponentName).
@@ -948,18 +969,8 @@ func (r *CrossplaneReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *CrossplaneReconciler) mapSecretToRequests(ctx context.Context, secret *corev1.Secret) []ctrl.Request {
+func (r *CrossplaneReconciler) mapSecretToRequests(ctx context.Context, _ *corev1.Secret) []ctrl.Request {
 	log := log.FromContext(ctx)
-
-	providerConfig := &v1alpha1.ProviderConfig{}
-	if err := r.PlatformCluster.Client().Get(ctx, types.NamespacedName{Name: r.ProviderName}, providerConfig); err != nil {
-		log.Error(err, "failed to get ProviderConfig while mapping secret")
-		return nil
-	}
-
-	if !isSecretReferencedInProviderConfig(providerConfig, secret.Name) {
-		return nil
-	}
 
 	crossplanesList := &v1alpha1.CrossplaneList{}
 	if err := r.OnboardingCluster.Client().List(ctx, crossplanesList); err != nil {
@@ -967,7 +978,7 @@ func (r *CrossplaneReconciler) mapSecretToRequests(ctx context.Context, secret *
 		return nil
 	}
 
-	log.Info("Source secret changed, triggering reconciliation", "secret", secret.Name)
+	log.Info("Source secret changed, triggering reconciliation for all Crossplane instances")
 
 	requests := make([]ctrl.Request, 0, len(crossplanesList.Items))
 	for _, crossplaneInstance := range crossplanesList.Items {
@@ -976,28 +987,6 @@ func (r *CrossplaneReconciler) mapSecretToRequests(ctx context.Context, secret *
 		})
 	}
 	return requests
-}
-
-func isSecretReferencedInProviderConfig(pc *v1alpha1.ProviderConfig, secretName string) bool {
-	for _, versions := range pc.Spec.CrossplaneVersions {
-		if versions.Chart.SecretRef.Name == secretName {
-			return true
-		}
-		if versions.Image != nil && versions.Image.SecretRef.Name == secretName {
-			return true
-		}
-	}
-	for _, pullSecret := range pc.Spec.Providers.ImagePullSecrets {
-		if pullSecret.Name == secretName {
-			return true
-		}
-	}
-	for _, pullSecret := range functionImagePullSecrets(pc) {
-		if pullSecret.Name == secretName {
-			return true
-		}
-	}
-	return false
 }
 
 func getMCPPermissions() []clustersv1alpha1.PermissionsRequest {
@@ -1025,78 +1014,111 @@ func getMCPRoleRefs() []commonapi.RoleRef {
 	}
 }
 
-// normalizeVersion strips a leading v from a version string.
-func normalizeVersion(version string) string {
-	return strings.TrimPrefix(version, "v")
-}
+const (
+	discoveryIDCrossplane = "crossplane"
+	discoveryIDProviders  = "providers"
+	discoveryIDFunctions  = "functions"
+)
 
-// GetResolverFunc is used to verify if the Crossplane instance configuration with its providers and functions is valid.
-// It checks the name and versions against the configured v1alpha1.ProviderConfig on the Platform cluster.
-// The function returns a v1beta1.VersionResolverFn that can be used to resolve the versions later in the reconcile loop.
-//
-//nolint:gocyclo
-func (r *CrossplaneReconciler) GetResolverFunc(providerConfig *v1alpha1.ProviderConfig) v1beta1.VersionResolverFn {
+// GetResolverFunc returns a VersionResolverFn that resolves component versions via OCM discovery.
+func (r *CrossplaneReconciler) GetResolverFunc(ctx context.Context, resolver discovery.Resolver, pc *v1alpha1.ProviderConfig) v1beta1.VersionResolverFn {
 	return func(componentName string, version string) (v1beta1.ComponentVersion, error) {
-		// Check if Crossplane is installable
+		crossplaneMatchFunc := discovery.ComponentByShortName(component.CrossplaneRelease)
 		if componentName == component.CrossplaneRelease {
-			for _, availableVersion := range providerConfig.Spec.CrossplaneVersions {
-				if availableVersion.Version == version {
-					dockerRef := ""
-					if availableVersion.Image != nil {
-						dockerRef = availableVersion.Image.URL
-					}
-					return v1beta1.ComponentVersion{
-						OCIURL:    availableVersion.Chart.URL, // format: <image-location>:<version>
-						DockerRef: dockerRef,                  // format: <image-location>:<version>, empty if not specified
-						Version:   version,
-					}, nil
+			dockerRef := ""
+			if pc.Spec.Crossplane.CrossplaneImage.IsSet() {
+				var imageMatchFunc discovery.ResourceMatchFunc
+				if pc.Spec.Crossplane.CrossplaneImage.Name != "" {
+					imageMatchFunc = discovery.ResourceByName(pc.Spec.Crossplane.CrossplaneImage.Name)
+				}
+				if pc.Spec.Crossplane.CrossplaneImage.ResourceType != "" {
+					imageMatchFunc = discovery.ResourceByType(pc.Spec.Crossplane.CrossplaneImage.ResourceType)
+				}
+				if pc.Spec.Crossplane.CrossplaneImage.Label != nil {
+					imageMatchFunc = discovery.ResourceByLabel(pc.Spec.Crossplane.CrossplaneImage.Label.Key, jsonString(pc.Spec.Crossplane.CrossplaneImage.Label.Value))
+				}
+				image, err := resolver.Resolve(ctx, discoveryIDCrossplane, version, crossplaneMatchFunc, imageMatchFunc)
+				if errors.Is(err, discovery.ErrComponentNotFound) {
+					available, _ := resolver.ListComponentVersions(ctx, discoveryIDCrossplane, crossplaneMatchFunc)
+					return v1beta1.ComponentVersion{}, fmt.Errorf("%w: crossplane version %q is not available, available versions: %v", errutils.ErrInvalidUserInput, version, available)
+				}
+				if err != nil {
+					return v1beta1.ComponentVersion{}, fmt.Errorf("could not resolve crossplane image resource: %w", err)
+				}
+				dockerRef = image.AccessURL
+			}
+			chartMatchFunc := discovery.ResourceByLabel(resourceLabel, jsonString("helmChart"))
+			if pc.Spec.Crossplane.CrossplaneChart.IsSet() {
+				if pc.Spec.Crossplane.CrossplaneChart.Name != "" {
+					chartMatchFunc = discovery.ResourceByName(pc.Spec.Crossplane.CrossplaneChart.Name)
+				}
+				if pc.Spec.Crossplane.CrossplaneChart.ResourceType != "" {
+					chartMatchFunc = discovery.ResourceByName(pc.Spec.Crossplane.CrossplaneChart.Name)
+				}
+				if pc.Spec.Crossplane.CrossplaneChart.Label != nil {
+					chartMatchFunc = discovery.ResourceByLabel(pc.Spec.Crossplane.CrossplaneChart.Label.Key, jsonString(pc.Spec.Crossplane.CrossplaneChart.Label.Value))
 				}
 			}
-			available := make([]string, 0, len(providerConfig.Spec.CrossplaneVersions))
-			for _, v := range providerConfig.Spec.CrossplaneVersions {
-				available = append(available, v.Version)
+			chart, err := resolver.Resolve(ctx, discoveryIDCrossplane, version, crossplaneMatchFunc, chartMatchFunc)
+			if errors.Is(err, discovery.ErrComponentNotFound) {
+				available, _ := resolver.ListComponentVersions(ctx, discoveryIDCrossplane, crossplaneMatchFunc)
+				return v1beta1.ComponentVersion{}, fmt.Errorf("%w: crossplane version %q is not available, available versions: %v", errutils.ErrInvalidUserInput, version, available)
 			}
-			return v1beta1.ComponentVersion{}, fmt.Errorf("%w: requested version %q is not available, available versions: %v", errutils.ErrInvalidUserInput, version, available)
+			if err != nil {
+				return v1beta1.ComponentVersion{}, fmt.Errorf("could not resolve crossplane chart resource: %w", err)
+			}
+			return v1beta1.ComponentVersion{
+				OCIURL:    chart.AccessURL,
+				DockerRef: dockerRef,
+				Version:   version,
+			}, nil
 		}
 
-		// Check if Provider is installable
-		var availableVersions []string
-		for _, provider := range providerConfig.Spec.Providers.AvailableProviders {
-			if componentName == provider.Name {
-				for _, configuredVersion := range provider.Versions {
-					if normalizeVersion(configuredVersion) == normalizeVersion(version) {
-						return v1beta1.ComponentVersion{
-							DockerRef: provider.Package + ":" + configuredVersion, // format: <image-location>:<version>
-							Version:   configuredVersion,
-						}, nil
-					}
-				}
-				availableVersions = append(availableVersions, provider.Versions...)
+		providerMatch := discovery.ComponentByShortName(componentName)
+		providerImageMatchFunc := discovery.ResourceByLabel("crossplane.services.open-control-plane.io/resource", jsonString("ociImage"))
+		if pc.Spec.Providers.Image.IsSet() {
+			if pc.Spec.Providers.Image.Name != "" {
+				providerImageMatchFunc = discovery.ResourceByName(pc.Spec.Providers.Image.Name)
+			}
+			if pc.Spec.Providers.Image.ResourceType != "" {
+				providerImageMatchFunc = discovery.ResourceByType(pc.Spec.Providers.Image.ResourceType)
+			}
+			if pc.Spec.Providers.Image.Label != nil {
+				providerImageMatchFunc = discovery.ResourceByLabel(pc.Spec.Providers.Image.Label.Key, jsonString(pc.Spec.Providers.Image.Label.Value))
 			}
 		}
-		if len(availableVersions) > 0 {
-			return v1beta1.ComponentVersion{}, fmt.Errorf("%w: requested version %q for provider %q is not available, available versions: %v", errutils.ErrInvalidUserInput, version, componentName, availableVersions)
+		if image, err := resolver.Resolve(ctx, discoveryIDProviders, version, providerMatch, providerImageMatchFunc); err == nil {
+			return v1beta1.ComponentVersion{
+				DockerRef: image.AccessURL,
+				Version:   version,
+			}, nil
+		}
+		available, _ := resolver.ListComponentVersions(ctx, discoveryIDProviders, providerMatch)
+		if len(available) > 0 {
+			return v1beta1.ComponentVersion{}, fmt.Errorf("%w: component %q version %q is not available, available versions: %v", errutils.ErrInvalidUserInput, componentName, version, available)
 		}
 
-		// Check if Function is installable
-		var availableFunctionVersions []string
-		for _, function := range providerConfig.Spec.Functions.AvailableFunctions {
-			if componentName == function.Name {
-				for _, configuredVersion := range function.Versions {
-					if normalizeVersion(configuredVersion) == normalizeVersion(version) {
-						return v1beta1.ComponentVersion{
-							DockerRef: function.Package + ":" + configuredVersion, // format: <image-location>:<version>
-							Version:   configuredVersion,
-						}, nil
-					}
-				}
-				availableFunctionVersions = append(availableFunctionVersions, function.Versions...)
+		functionMatch := discovery.ComponentByShortName(componentName)
+		functionImageMatchFunc := discovery.ResourceByLabel("crossplane.services.open-control-plane.io/resource", jsonString("ociImage"))
+		if pc.Spec.Functions.Image.IsSet() {
+			if pc.Spec.Functions.Image.Name != "" {
+				functionImageMatchFunc = discovery.ResourceByName(pc.Spec.Functions.Image.Name)
+			}
+			if pc.Spec.Functions.Image.ResourceType != "" {
+				functionImageMatchFunc = discovery.ResourceByType(pc.Spec.Functions.Image.ResourceType)
+			}
+			if pc.Spec.Functions.Image.Label != nil {
+				functionImageMatchFunc = discovery.ResourceByLabel(pc.Spec.Functions.Image.Label.Key, jsonString(pc.Spec.Functions.Image.Label.Value))
 			}
 		}
-		if len(availableFunctionVersions) > 0 {
-			return v1beta1.ComponentVersion{}, fmt.Errorf("%w: requested version %q for function %q is not available, available versions: %v", errutils.ErrInvalidUserInput, version, componentName, availableFunctionVersions)
+		if image, err := resolver.Resolve(ctx, discoveryIDFunctions, version, functionMatch, functionImageMatchFunc); err == nil {
+			return v1beta1.ComponentVersion{
+				DockerRef: image.AccessURL,
+				Version:   version,
+			}, nil
 		}
-		return v1beta1.ComponentVersion{}, fmt.Errorf("%w: component %q is not available in the ProviderConfig", errutils.ErrInvalidUserInput, componentName)
+		available, _ = resolver.ListComponentVersions(ctx, discoveryIDFunctions, functionMatch)
+		return v1beta1.ComponentVersion{}, fmt.Errorf("%w: component %q version %q is not available, available versions: %v", errutils.ErrInvalidUserInput, componentName, version, available)
 	}
 }
 
@@ -1142,4 +1164,8 @@ func (r *CrossplaneReconciler) hasFinalizer(object client.Object, finalizer stri
 // and a hash suffix appended for uniqueness via ShortenToXCharacters.
 func prefixSecretName(secretName string) (string, error) {
 	return ctrlutils.ShortenToXCharacters(fmt.Sprintf("%s%s", secretNamePrefix, secretName), ctrlutils.K8sMaxNameLength)
+}
+
+func jsonString(s string) json.RawMessage {
+	return strconv.AppendQuote(nil, s)
 }
