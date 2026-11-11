@@ -6,7 +6,8 @@ package v1alpha1
 
 import (
 	"github.com/openmcp-project/openmcp-operator/api/common"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -37,6 +38,11 @@ func (in *AvailableCrossplaneProvider) DeepCopyInto(out *AvailableCrossplaneProv
 		in, out := &in.Versions, &out.Versions
 		*out = make([]string, len(*in))
 		copy(*out, *in)
+	}
+	if in.PollInterval != nil {
+		in, out := &in.PollInterval, &out.PollInterval
+		*out = new(v1.Duration)
+		**out = **in
 	}
 }
 
@@ -372,7 +378,7 @@ func (in *ProviderConfigSpec) DeepCopyInto(out *ProviderConfigSpec) {
 	in.Functions.DeepCopyInto(&out.Functions)
 	if in.CABundleRef != nil {
 		in, out := &in.CABundleRef, &out.CABundleRef
-		*out = new(v1.ConfigMapKeySelector)
+		*out = new(corev1.ConfigMapKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
 }
