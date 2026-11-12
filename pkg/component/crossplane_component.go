@@ -70,9 +70,12 @@ func (c *Crossplane) IsInstallable(ctx context.Context) (bool, error) {
 func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAdapter, error) {
 	rfn := rcontext.VersionResolver(ctx)
 
-	comp, _ := rfn(CrossplaneRelease, c.Config.Version)
+	comp, err := rfn(CrossplaneRelease, c.Config.Version)
+	if err != nil {
+		return nil, err
+	}
 
-	url, tag, _, err := image.ParseImage(comp.OCIURL)
+	url, tag, digest, err := image.ParseImage(comp.OCIURL)
 	if err != nil {
 		return nil, err
 	}
@@ -85,16 +88,21 @@ func (c *Crossplane) BuildSourceRepository(ctx context.Context) (fluxcd.SourceAd
 		}
 	}
 
+	ref := &sourcev1.OCIRepositoryRef{}
+	if digest != "" {
+		ref.Digest = digest
+	} else {
+		ref.Tag = tag
+	}
+
 	repo := &sourcev1.OCIRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      strings.ToLower(ComponentNameCrossplane),
 			Namespace: rcontext.TenantNamespace(ctx),
 		},
 		Spec: sourcev1.OCIRepositorySpec{
-			URL: ociURL,
-			Reference: &sourcev1.OCIRepositoryRef{
-				Tag: tag,
-			},
+			URL:       ociURL,
+			Reference: ref,
 			Timeout:   &metav1.Duration{Duration: 1 * time.Minute},
 			SecretRef: secretRef,
 		},
@@ -158,7 +166,10 @@ func (c *Crossplane) applyDefaultValues(rfn v1beta1.VersionResolverFn) error {
 		return nil
 	}
 
-	comp, _ := rfn(CrossplaneRelease, c.Config.Version)
+	comp, err := rfn(CrossplaneRelease, c.Config.Version)
+	if err != nil {
+		return err
+	}
 
 	// Read user-provided values
 	values := map[string]any{}
@@ -174,15 +185,24 @@ func (c *Crossplane) applyDefaultValues(rfn v1beta1.VersionResolverFn) error {
 	// Override the image only if an image URL was provided in ProviderConfig spec.
 	// If omitted, the Helm chart default image is used.
 	if comp.DockerRef != "" {
-		url, tag, _, err := image.ParseImage(comp.DockerRef)
+		url, tag, digest, err := image.ParseImage(comp.DockerRef)
 		if err != nil {
 			return err
 		}
 
-		// Pull Deployment image from specified chart URL provided in ProviderConfig spec
-		values["image"] = map[string]any{
-			"repository": url,
-			"tag":        tag,
+		// Pull Deployment image from specified chart URL provided in ProviderConfig spec.
+		// The Crossplane chart joins repository+tag with ":", so digest refs must use
+		// ignoreTag=true with the full repo@digest string as repository instead.
+		if digest != "" {
+			values["image"] = map[string]any{
+				"repository": url + "@" + digest,
+				"ignoreTag":  true,
+			}
+		} else {
+			values["image"] = map[string]any{
+				"repository": url,
+				"tag":        tag,
+			}
 		}
 	}
 
