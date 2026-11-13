@@ -777,8 +777,8 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/opencontainers/runtime-spec v1.3.0 h1:YZupQUdctfhpZy3TM39nN9Ika5CBWT5diQ8ibYCRkxg=
 github.com/opencontainers/runtime-spec v1.3.0/go.mod h1:jwyrGlmzljRJv/Fgzds9SsS/C5hL+LL3ko9hs6T5lQ0=
-github.com/openmcp-project/control-plane-operator v0.5.6 h1:M1kiw9vPBM1xYlIOlU43fRg2YPYSGnMiPVDrxyNZ5OM=
-github.com/openmcp-project/control-plane-operator v0.5.6/go.mod h1:70GWBxMBrTyxeMq5oKgJJTXhyJZ9v9S++TI16ViyK6w=
+github.com/openmcp-project/control-plane-operator v0.5.7 h1:N3oziPV+B+1Z1GS3e2/ccLqJQcY4Y1xoeu5V3OpASrY=
+github.com/openmcp-project/control-plane-operator v0.5.7/go.mod h1:j2B18czggrvtj6wz6hqR/8IXd83WJAJQM/w1DDNRGHg=
 github.com/openmcp-project/controller-utils v0.34.0 h1:VKbxGtt8T7ojnCqcAcQEdzBCkSjxdC2N34rzPN2a8FI=
 github.com/openmcp-project/controller-utils v0.34.0/go.mod h1:C7EAh6pdVGXg4NaaZsZ1kHxNEPyk7RH4O9cShLWcnII=
 github.com/openmcp-project/openmcp-operator/api v1.4.4 h1:Ol/dHPVLAClRlWr0KvG9q+ttAjnJz5IwJM+ldGzVdLM=
