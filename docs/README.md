@@ -4,6 +4,7 @@
 ## Configuration
 
 - [Custom CA Bundle Configuration](configuration/custom-ca.md)
+- [Poll Interval Configuration](configuration/poll-interval.md)
 
 ## Overview
 

@@ -3,10 +3,15 @@ package component
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	crossplanev1beta1 "github.com/crossplane/crossplane/apis/v2/pkg/v1beta1"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -23,9 +28,10 @@ var _ components.TargetComponent = &DeploymentRuntimeConfig{}
 
 // DeploymentRuntimeConfig represents a Crossplane DeploymentRuntimeConfig configuration.
 type DeploymentRuntimeConfig struct {
-	Name    string
-	Config  *crossplanev1beta1.DeploymentRuntimeConfigSpec
-	Enabled bool
+	Name         string
+	PollInterval *metav1.Duration
+	Config       *crossplanev1beta1.DeploymentRuntimeConfigSpec
+	Enabled      bool
 }
 
 // BuildObjectToReconcile implements object.ObjectComponent.
@@ -41,10 +47,66 @@ func (d *DeploymentRuntimeConfig) BuildObjectToReconcile(_ context.Context) (cli
 func (d *DeploymentRuntimeConfig) ReconcileObject(_ context.Context, obj client.Object) error {
 	drc := obj.(*crossplanev1beta1.DeploymentRuntimeConfig)
 	utils.SetManagedBy(drc)
+	args := getArgs(drc)
+
+	if drc.GetResourceVersion() == "" && !existingPollArg(args) && d.PollInterval != nil {
+		setArgs(d.Config, []string{fmt.Sprintf("--poll=%s", d.PollInterval.Duration)})
+	} else {
+		setArgs(d.Config, args)
+	}
 
 	drc.Spec = *d.Config
 
 	return nil
+}
+
+// getArgs returns the arguments of the package-runtime container.
+func getArgs(drc *crossplanev1beta1.DeploymentRuntimeConfig) []string {
+	dt := drc.Spec.DeploymentTemplate
+	if dt == nil || dt.Spec == nil {
+		return nil
+	}
+	for _, c := range dt.Spec.Template.Spec.Containers {
+		if c.Name != "package-runtime" {
+			continue
+		}
+		return c.Args
+	}
+	return nil
+}
+
+// setsArgs sets the passed args on the package-runtime container.
+func setArgs(drcSpec *crossplanev1beta1.DeploymentRuntimeConfigSpec, args []string) {
+	if drcSpec == nil || args == nil {
+		return
+	}
+	if drcSpec.DeploymentTemplate == nil {
+		drcSpec.DeploymentTemplate = &crossplanev1beta1.DeploymentTemplate{}
+	}
+	if drcSpec.DeploymentTemplate.Spec == nil {
+		drcSpec.DeploymentTemplate.Spec = &appsv1.DeploymentSpec{Selector: &metav1.LabelSelector{}}
+	}
+	containers := drcSpec.DeploymentTemplate.Spec.Template.Spec.Containers
+	idx := slices.IndexFunc(containers, func(c v1.Container) bool {
+		return c.Name == "package-runtime"
+	})
+	if idx == -1 {
+		containers = append(containers, v1.Container{Name: "package-runtime"})
+		idx = len(containers) - 1
+	}
+	containers[idx].Args = args
+	drcSpec.DeploymentTemplate.Spec.Template.Spec.Containers = containers
+}
+
+// existingPollArg returns true if there is a --poll flag among the arguments.
+func existingPollArg(args []string) bool {
+	for _, arg := range args {
+		_, ok := strings.CutPrefix(arg, "--poll=")
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 // OrphanDetectorContext implements object.OrphanedObjectsDetector.
